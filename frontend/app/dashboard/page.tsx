@@ -1,9 +1,12 @@
 "use client";
 
-import Image from "next/image";
-import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+
+import { AppNavbar } from "../../components/AppNavbar";
+import { ArchitectureBackdrop } from "../../components/ArchitectureBackdrop";
+import { ConsoleLoadingState } from "../../components/ConsoleLoadingState";
+import { GithubMark } from "../../components/GithubMark";
 
 const API_BASE_URL = "http://localhost:3001";
 const TOKEN_STORAGE_KEY = "grepai_token";
@@ -41,13 +44,6 @@ type ActivityItem = {
   detail: string;
 };
 
-type MetricCard = {
-  label: string;
-  value: string;
-  subtext: string;
-  accent: "blue" | "rose" | "emerald" | "violet";
-};
-
 class ApiRequestError extends Error {
   status: number;
 
@@ -57,6 +53,12 @@ class ApiRequestError extends Error {
     this.status = status;
   }
 }
+
+type RepoInsight = Repo & {
+  latestAnalysis?: RecentAnalysis;
+  analysisCount: number;
+  affectedModules: string[];
+};
 
 function decodeUsernameFromToken(token: string): string {
   try {
@@ -79,44 +81,6 @@ function decodeUsernameFromToken(token: string): string {
   } catch {
     return "Engineer";
   }
-}
-
-function getGreeting(date: Date): string {
-  const hour = date.getHours();
-
-  if (hour < 12) {
-    return "Good morning";
-  }
-
-  if (hour < 18) {
-    return "Good afternoon";
-  }
-
-  return "Good evening";
-}
-
-function riskBadgeStyles(risk: RiskLevel): string {
-  if (risk === "HIGH") {
-    return "border-rose-400/20 bg-rose-500/10 text-rose-200";
-  }
-
-  if (risk === "MEDIUM") {
-    return "border-amber-400/20 bg-amber-500/10 text-amber-200";
-  }
-
-  return "border-emerald-400/20 bg-emerald-500/10 text-emerald-200";
-}
-
-function riskAccent(risk: RiskLevel): string {
-  if (risk === "HIGH") {
-    return "bg-rose-400";
-  }
-
-  if (risk === "MEDIUM") {
-    return "bg-amber-400";
-  }
-
-  return "bg-emerald-400";
 }
 
 function formatRelativeTime(dateString: string): string {
@@ -211,6 +175,143 @@ async function fetchJson<T>(url: string, token: string): Promise<T> {
   return parsedBody as T;
 }
 
+function riskText(risk: RiskLevel): string {
+  if (risk === "HIGH") {
+    return "HIGH RISK";
+  }
+
+  if (risk === "MEDIUM") {
+    return "MEDIUM RISK";
+  }
+
+  return "LOW RISK";
+}
+
+function riskTone(risk: RiskLevel): string {
+  if (risk === "HIGH") {
+    return "border-[#5A2424] text-[#F5F5F2]";
+  }
+
+  if (risk === "MEDIUM") {
+    return "border-[#4A4030] text-[#F5F5F2]";
+  }
+
+  return "border-[#2A3D32] text-[#F5F5F2]";
+}
+
+function deriveAffectedModules(text: string): string[] {
+  const source = text.toLowerCase();
+  const modules: string[] = [];
+
+  const register = (match: boolean, label: string) => {
+    if (match && !modules.includes(label)) {
+      modules.push(label);
+    }
+  };
+
+  register(source.includes("auth"), "auth-service");
+  register(source.includes("session"), "session-manager");
+  register(source.includes("gateway") || source.includes("api"), "api-gateway");
+  register(source.includes("cache") || source.includes("report"), "reporting-service");
+  register(source.includes("token") || source.includes("refresh"), "token-runtime");
+  register(source.includes("middleware"), "shared-middleware");
+  register(source.includes("scheduler"), "scheduler-runtime");
+
+  return modules.slice(0, 3);
+}
+
+function buildRepoInsights(repos: Repo[], reports: RecentAnalysis[]): RepoInsight[] {
+  return repos
+    .map((repo) => {
+      const relatedAnalyses = reports.filter(
+        (report) => report.repo.fullName === repo.fullName,
+      );
+      const latestAnalysis = relatedAnalyses
+        .slice()
+        .sort(
+          (left, right) =>
+            new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+        )[0];
+
+      const affectedModules = latestAnalysis
+        ? deriveAffectedModules(`${latestAnalysis.prTitle} ${latestAnalysis.summary}`)
+        : [];
+
+      return {
+        ...repo,
+        latestAnalysis,
+        analysisCount: relatedAnalyses.length,
+        affectedModules,
+      };
+    })
+    .sort((left, right) => {
+      const leftTime = new Date(left.latestAnalysis?.createdAt ?? left.createdAt).getTime();
+      const rightTime = new Date(right.latestAnalysis?.createdAt ?? right.createdAt).getTime();
+
+      return rightTime - leftTime;
+    });
+}
+
+function buildActivityItem(report: RecentAnalysis): ActivityItem {
+  const source = `${report.prTitle} ${report.summary}`.toLowerCase();
+
+  if (report.riskLevel === "HIGH") {
+    return {
+      time: formatActivityTime(report.createdAt),
+      label: "HIGH RISK DETECTED",
+      detail: `PR #${report.prNumber} — ${report.repo.fullName}`,
+    };
+  }
+
+  if (source.includes("middleware")) {
+    return {
+      time: formatActivityTime(report.createdAt),
+      label: "MIDDLEWARE PROPAGATION OBSERVED",
+      detail: `PR #${report.prNumber} — ${report.repo.fullName}`,
+    };
+  }
+
+  if (source.includes("boundary") || source.includes("token")) {
+    return {
+      time: formatActivityTime(report.createdAt),
+      label: "BOUNDARY MUTATION OBSERVED",
+      detail: `PR #${report.prNumber} — ${report.repo.fullName}`,
+    };
+  }
+
+  if (source.includes("session") || source.includes("retry")) {
+    return {
+      time: formatActivityTime(report.createdAt),
+      label: "SESSION CHAIN DETECTED",
+      detail: `PR #${report.prNumber} — ${report.repo.fullName}`,
+    };
+  }
+
+  return {
+    time: formatActivityTime(report.createdAt),
+    label: "ARCHITECTURE IMPACT UPDATED",
+    detail: `PR #${report.prNumber} — ${report.repo.fullName}`,
+  };
+}
+
+function LoadingState() {
+  return (
+    <ConsoleLoadingState
+      label="GrepAI — PR Intelligence"
+      title="Initializing dashboard."
+      command="> restoring repository intelligence..."
+    />
+  );
+}
+
+function SectionLabel({ children }: { children: React.ReactNode }) {
+  return (
+    <p className="font-[var(--font-ibm-plex-mono)] text-[11px] uppercase tracking-[0.28em] text-[#6B6560]">
+      {children}
+    </p>
+  );
+}
+
 export default function DashboardPage() {
   const router = useRouter();
   const [isCheckingAuth, setIsCheckingAuth] = useState(true);
@@ -220,6 +321,11 @@ export default function DashboardPage() {
   const [reports, setReports] = useState<RecentAnalysis[]>([]);
   const [errorMessage, setErrorMessage] = useState("");
 
+  const initializeSession = (token: string) => {
+    setUsername(decodeUsernameFromToken(token));
+    setIsCheckingAuth(false);
+  };
+
   useEffect(() => {
     const token = window.localStorage.getItem(TOKEN_STORAGE_KEY);
 
@@ -228,8 +334,9 @@ export default function DashboardPage() {
       return;
     }
 
-    setUsername(decodeUsernameFromToken(token));
-    setIsCheckingAuth(false);
+    queueMicrotask(() => {
+      initializeSession(token);
+    });
   }, [router]);
 
   useEffect(() => {
@@ -311,101 +418,47 @@ export default function DashboardPage() {
     };
   }, [isCheckingAuth, router]);
 
-  const greeting = useMemo(() => getGreeting(new Date()), []);
-  const userInitial = username.charAt(0).toUpperCase() || "E";
+  const repoInsights = buildRepoInsights(repos, reports);
+  const reportsByTime = reports
+    .slice()
+    .sort(
+      (left, right) =>
+        new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
+    );
+  const prioritizedReports = reports
+    .slice()
+    .sort((left, right) => {
+      const riskPriority = { HIGH: 3, MEDIUM: 2, LOW: 1 };
+      const riskDelta =
+        riskPriority[right.riskLevel] - riskPriority[left.riskLevel];
 
-  const metricCards = useMemo<MetricCard[]>(
-    () => [
-      {
-        label: "PRs Analyzed",
-        value: String(reports.length),
-        subtext:
-          reports.length > 0
-            ? `${reports.length} recent reports loaded`
-            : "Waiting for first analysis",
-        accent: "blue",
-      },
-      {
-        label: "High Risk Detected",
-        value: String(reports.filter((report) => report.riskLevel === "HIGH").length),
-        subtext: "Within recent analyses",
-        accent: "rose",
-      },
-      {
-        label: "Repos Monitored",
-        value: String(repos.length),
-        subtext:
-          repos.length > 0 ? "Watching pull requests" : "No repositories connected",
-        accent: "emerald",
-      },
-      {
-        label: "Avg Analysis Time",
-        value: "< 60s",
-        subtext: "GitHub-native response",
-        accent: "violet",
-      },
-    ],
-    [reports, repos],
-  );
-
-  const repoInsights = useMemo(() => {
-    const analysesByRepo = reports.reduce<Map<string, RecentAnalysis[]>>((map, report) => {
-      const existing = map.get(report.repo.fullName) ?? [];
-      existing.push(report);
-      map.set(report.repo.fullName, existing);
-      return map;
-    }, new Map());
-
-    return repos.map((repo) => {
-      const relatedAnalyses = analysesByRepo.get(repo.fullName) ?? [];
-      const latestAnalysis = relatedAnalyses
-        .slice()
-        .sort(
-          (left, right) =>
-            new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime(),
-        )[0];
-
-      return {
-        ...repo,
-        latestAnalysis,
-        analysisCount: relatedAnalyses.length,
-      };
-    });
-  }, [repos, reports]);
-
-  const systemActivity = useMemo<ActivityItem[]>(() => {
-    if (reports.length === 0 && repos.length === 0) {
-      return [
-        {
-          time: "--:--",
-          label: "Monitoring idle",
-          detail: "Connect a repository to start GrepAI intelligence.",
-        },
-      ];
-    }
-
-    const activities: ActivityItem[] = [];
-
-    for (const report of reports.slice(0, 4)) {
-      activities.push({
-        time: formatActivityTime(report.createdAt),
-        label: "Analysis complete",
-        detail: `PR #${report.prNumber} in ${report.repo.fullName} — ${report.riskLevel} risk`,
-      });
-    }
-
-    if (activities.length < 4) {
-      for (const repo of repos.slice(0, 4 - activities.length)) {
-        activities.push({
-          time: formatActivityTime(repo.createdAt),
-          label: "Repository connected",
-          detail: `${repo.fullName} monitoring ${repo.webhookId ? "active" : "pending"}`,
-        });
+      if (riskDelta !== 0) {
+        return riskDelta;
       }
-    }
 
-    return activities.slice(0, 4);
-  }, [reports, repos]);
+      return new Date(right.createdAt).getTime() - new Date(left.createdAt).getTime();
+    })
+    .slice(0, 6);
+
+  const systemActivity: ActivityItem[] =
+    reports.length === 0 && repos.length === 0
+      ? [
+          {
+            time: "--:--",
+            label: "MONITORING IDLE",
+            detail: "Connect a repository to begin intelligence streaming.",
+          },
+        ]
+      : [
+          ...reportsByTime.slice(0, 4).map((report) => buildActivityItem(report)),
+          ...repos.slice(0, 2).map((repo) => ({
+            time: formatActivityTime(repo.createdAt),
+            label: repo.webhookId ? "WEBHOOK ACTIVE" : "REPOSITORY CONNECTED",
+            detail: repo.webhookId
+              ? `${repo.fullName} monitoring active`
+              : `${repo.fullName} awaiting webhook confirmation`,
+          })),
+        ].slice(0, 6);
 
   const handleLogout = () => {
     window.localStorage.removeItem(TOKEN_STORAGE_KEY);
@@ -413,536 +466,312 @@ export default function DashboardPage() {
   };
 
   if (isCheckingAuth) {
-    return (
-      <main className="relative flex min-h-screen items-center justify-center overflow-hidden bg-[#050816] px-6">
-        <div className="pointer-events-none absolute inset-0">
-          <div className="absolute left-1/2 top-1/2 h-[26rem] w-[26rem] -translate-x-1/2 -translate-y-1/2 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.16)_0%,rgba(139,92,246,0.06)_42%,transparent_72%)] blur-3xl" />
-        </div>
-        <div className="relative flex flex-col items-center text-center animate-[fadeUp_0.5s_ease-out]">
-          <span className="relative mb-6 flex h-4 w-4">
-            <span className="absolute inset-0 rounded-full bg-emerald-400/50 blur-sm" />
-            <span className="relative h-4 w-4 animate-pulse rounded-full bg-emerald-400" />
-          </span>
-          <h1 className="text-2xl font-semibold tracking-tight text-[#F9FAFB]">
-            Loading your intelligence workspace...
-          </h1>
-          <p className="mt-3 max-w-md text-sm text-[#9CA3AF] sm:text-base">
-            Verifying your session and restoring architecture-aware monitoring.
-          </p>
-        </div>
-      </main>
-    );
+    return <LoadingState />;
   }
 
   return (
-    <div className="min-h-screen bg-[#050816] text-[#F9FAFB]">
-      <div className="pointer-events-none fixed inset-0 overflow-hidden">
-        <div className="absolute inset-0 bg-[linear-gradient(rgba(255,255,255,0.02)_1px,transparent_1px),linear-gradient(90deg,rgba(255,255,255,0.02)_1px,transparent_1px)] bg-[size:72px_72px] opacity-[0.08]" />
-        <div className="absolute left-[-8%] top-[8%] h-[26rem] w-[26rem] rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.14)_0%,transparent_72%)] blur-3xl" />
-        <div className="absolute right-[-10%] top-[18%] h-[24rem] w-[24rem] rounded-full bg-[radial-gradient(circle,rgba(139,92,246,0.1)_0%,transparent_72%)] blur-3xl" />
-        <div className="absolute left-[28%] top-[14%] h-[18rem] w-[18rem] rounded-full bg-[radial-gradient(circle,rgba(96,165,250,0.08)_0%,transparent_72%)] blur-3xl" />
-        <svg
-          aria-hidden="true"
-          viewBox="0 0 1400 900"
-          className="absolute inset-0 h-full w-full opacity-[0.22]"
-        >
-          <defs>
-            <linearGradient id="dashboard-topology" x1="0%" y1="0%" x2="100%" y2="100%">
-              <stop offset="0%" stopColor="rgba(96,165,250,0.12)" />
-              <stop offset="55%" stopColor="rgba(96,165,250,0.04)" />
-              <stop offset="100%" stopColor="rgba(139,92,246,0.08)" />
-            </linearGradient>
-            <radialGradient id="dashboard-dot" cx="50%" cy="50%" r="50%">
-              <stop offset="0%" stopColor="rgba(191,219,254,0.9)" />
-              <stop offset="100%" stopColor="rgba(191,219,254,0)" />
-            </radialGradient>
-          </defs>
-          <g className="animate-[topologyFloat_18s_ease-in-out_infinite]">
-            <path
-              d="M84 182C220 146 294 154 392 216C460 258 528 298 642 304C768 312 864 256 972 212C1104 160 1238 170 1324 230"
-              fill="none"
-              stroke="url(#dashboard-topology)"
-              strokeWidth="1"
-            />
-            <path
-              d="M136 516C276 488 392 452 536 446C650 442 740 464 844 514C926 552 1036 572 1226 528"
-              fill="none"
-              stroke="url(#dashboard-topology)"
-              strokeWidth="1"
-            />
-            <path
-              d="M316 262C346 322 360 408 346 514"
-              fill="none"
-              stroke="url(#dashboard-topology)"
-              strokeWidth="0.9"
-              strokeDasharray="4 14"
-              className="animate-[dashFlow_18s_linear_infinite]"
-            />
-            <path
-              d="M798 226C824 298 844 396 836 544"
-              fill="none"
-              stroke="url(#dashboard-topology)"
-              strokeWidth="0.9"
-              strokeDasharray="4 14"
-              className="animate-[dashFlow_22s_linear_infinite]"
-            />
-            {[
-              { x: 112, y: 176 },
-              { x: 312, y: 256 },
-              { x: 470, y: 286 },
-              { x: 640, y: 304 },
-              { x: 844, y: 244 },
-              { x: 1032, y: 198 },
-              { x: 1246, y: 216 },
-              { x: 346, y: 514 },
-              { x: 566, y: 452 },
-              { x: 836, y: 512 },
-              { x: 1210, y: 532 },
-            ].map((node, index) => (
-              <circle
-                key={`${node.x}-${node.y}`}
-                cx={node.x}
-                cy={node.y}
-                r={index % 3 === 0 ? "3.5" : "2.75"}
-                fill="url(#dashboard-dot)"
-                className="animate-[clusterPulse_14s_ease-in-out_infinite]"
-              />
-            ))}
-          </g>
-        </svg>
-      </div>
+    <div className="min-h-screen bg-[#000000] text-[#F5F5F2]">
+      <ArchitectureBackdrop imageOpacity="0.08" overlayOpacity="0.82" />
 
-      <header className="sticky top-0 z-30 border-b border-white/[0.06] bg-[#050816]/72 backdrop-blur-xl">
-        <div className="mx-auto flex h-20 w-full max-w-7xl items-center justify-between px-6 sm:px-8 lg:px-12">
-          <Link href="/" className="flex items-center gap-3">
-            <span className="relative flex h-10 w-10 items-center justify-center overflow-hidden rounded-xl border border-white/[0.08] bg-white/[0.02] shadow-[0_0_0_1px_rgba(59,130,246,0.08),0_10px_24px_rgba(6,12,24,0.35)]">
-              <span className="absolute inset-0 bg-[radial-gradient(circle_at_30%_30%,rgba(96,165,250,0.18),transparent_58%)]" />
-              <Image
-                src="/grepai-logo.png"
-                alt="GrepAI logo"
-                width={30}
-                height={30}
-                className="relative h-[30px] w-[30px] object-contain"
-                priority
-              />
-            </span>
-            <span className="text-sm font-bold tracking-[0.28em] text-[#F9FAFB]">
-              GREPAI
-            </span>
-          </Link>
+      <AppNavbar centerLabel="Dashboard" username={username} onLogout={handleLogout} />
 
-          <div className="hidden rounded-full border border-white/[0.06] bg-white/[0.03] px-5 py-2 text-xs font-medium uppercase tracking-[0.28em] text-[#9CA3AF] md:block">
-            Dashboard
+      <main className="relative mx-auto w-full max-w-[1600px] px-6 py-10 sm:px-8 lg:px-10">
+        <section className="border border-[#2A2A2A] px-6 py-6 lg:px-8">
+          <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_360px] lg:items-end">
+            <div className="max-w-[860px]">
+              <SectionLabel>SYSTEM DASHBOARD</SectionLabel>
+              <h1 className="mt-4 font-[var(--font-dm-serif-display)] text-[clamp(1.85rem,2.9vw,2.7rem)] leading-[1.03] text-[#F5F5F2]">
+                Live Merge Intelligence
+              </h1>
+              <button
+                type="button"
+                onClick={() => router.push("/connect")}
+                className="mt-5 inline-flex h-12 w-full max-w-[260px] items-center justify-center gap-3 border border-white/22 bg-white/5 px-5 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#F5F5F2] transition-colors duration-150 hover:border-white/38 hover:bg-white/[0.08]"
+              >
+                <GithubMark className="h-4 w-4 fill-current" />
+                <span>Connect Repository</span>
+              </button>
+              <p className="mt-5 max-w-[760px] text-[14px] leading-6 text-white/76">
+                GrepAI is monitoring pull request activity, tracing architecture
+                impact, and surfacing repository risk as it moves toward merge.
+              </p>
+            </div>
+
+            <aside className="border-t border-[#2A2A2A] pt-4 lg:border-l lg:border-t-0 lg:pl-6 lg:pt-0">
+              <SectionLabel>ACTIVE INTELLIGENCE STATE</SectionLabel>
+              <div className="mt-4 space-y-3 font-[var(--font-ibm-plex-mono)] text-[10px] uppercase tracking-[0.18em] text-white/44">
+                <div className="flex items-center justify-between border-b border-[#2A2A2A] pb-3">
+                  <span>Monitoring</span>
+                  <span className="inline-flex items-center gap-2 text-[#16A34A]">
+                    <span className="h-1.5 w-1.5 animate-[statusPulse_2.8s_ease-in-out_infinite] bg-[#16A34A]" />
+                    Live
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-b border-[#2A2A2A] pb-3">
+                  <span>High-risk stream</span>
+                  <span className="text-white/78">
+                    {reports.filter((report) => report.riskLevel === "HIGH").length}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between border-b border-[#2A2A2A] pb-3">
+                  <span>Webhook state</span>
+                  <span className="text-white/78">
+                    {repos.some((repo) => repo.webhookId) ? "Active" : "Idle"}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span>Analysis queue</span>
+                  <span className="text-white/78">Ready</span>
+                </div>
+              </div>
+            </aside>
           </div>
+        </section>
 
-          <div className="flex items-center gap-3 sm:gap-4">
-            <div className="flex items-center gap-3 rounded-full border border-white/[0.06] bg-white/[0.03] px-3 py-2">
-              <span className="inline-flex h-9 w-9 items-center justify-center rounded-full border border-blue-400/20 bg-blue-500/10 text-sm font-semibold text-blue-100">
-                {userInitial}
-              </span>
-              <div className="hidden text-left sm:block">
-                <p className="text-sm font-medium text-[#F9FAFB]">{username}</p>
-                <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-[#6B7280]">
-                  Authenticated
-                </p>
+        {errorMessage ? (
+          <section className="mt-6 border border-[#4A1F1F] px-6 py-4">
+            <p className="font-[var(--font-ibm-plex-mono)] text-[11px] uppercase tracking-[0.18em] text-[#FF725E]">
+              DATA STREAM DEGRADED
+            </p>
+            <p className="mt-3 font-[var(--font-ibm-plex-mono)] text-[13px] tracking-[0.02em] text-white/62">
+              {"> partial dashboard data unavailable..."}{" "}
+              <span className="text-[#FF725E]">{errorMessage}</span>
+            </p>
+          </section>
+        ) : null}
+
+        <div className="mt-6 grid gap-6 xl:grid-cols-[minmax(0,1.7fr)_minmax(280px,0.9fr)]">
+          <section className="border border-[#2A2A2A] px-6 py-6 lg:px-8">
+            <div className="flex items-end justify-between gap-4">
+              <div>
+                <SectionLabel>ACTIVE RISK STREAM</SectionLabel>
+                <h2 className="mt-4 text-[20px] font-medium text-[#F5F5F2]">
+                  Merge risk stream
+                </h2>
+              </div>
+              <div className="hidden border border-[#2A2A2A] px-3 py-2 font-[var(--font-ibm-plex-mono)] text-[10px] uppercase tracking-[0.18em] text-white/58 sm:block">
+                {isLoadingData
+                  ? "..."
+                  : `${reports.filter((report) => report.riskLevel === "HIGH").length} HIGH-RISK EVENTS`}
               </div>
             </div>
 
-            <button
-              type="button"
-              onClick={handleLogout}
-              className="rounded-xl border border-white/[0.08] bg-white/[0.03] px-4 py-2.5 text-sm font-medium text-[#D1D5DB] transition duration-200 hover:-translate-y-0.5 hover:border-blue-300/20 hover:text-[#F9FAFB]"
-            >
-              Logout
-            </button>
-          </div>
-        </div>
-      </header>
-
-      <main className="relative mx-auto w-full max-w-7xl px-6 py-10 sm:px-8 lg:px-12">
-        <div className="grid gap-8 xl:grid-cols-[minmax(0,1fr)_20rem]">
-          <div className="space-y-8 animate-[fadeUp_0.55s_ease-out]">
-            <section className="relative overflow-hidden rounded-[28px] border border-white/[0.06] bg-[rgba(255,255,255,0.035)] px-6 py-7 sm:px-8">
-              <div className="pointer-events-none absolute -right-8 top-0 h-36 w-36 rounded-full bg-[radial-gradient(circle,rgba(59,130,246,0.14)_0%,transparent_72%)] blur-3xl" />
-              <p className="font-mono text-[11px] uppercase tracking-[0.36em] text-[#7DD3FC]">
-                Architecture-aware monitoring
-              </p>
-              <div className="mt-4 flex flex-col gap-5 lg:flex-row lg:items-end lg:justify-between">
-                <div>
-                  <h1 className="text-3xl font-semibold tracking-tight text-[#F9FAFB] sm:text-4xl">
-                    {greeting}, {username}
-                  </h1>
-                  <p className="mt-3 max-w-2xl text-sm leading-7 text-[#9CA3AF] sm:text-base">
-                    PR risk intelligence is active across your repositories.
-                    Detect system impact before merge and trace risky changes
-                    across services.
-                  </p>
-                </div>
-
-                <div className="inline-flex items-center gap-3 self-start rounded-full border border-emerald-400/15 bg-emerald-500/10 px-4 py-2 text-sm text-emerald-100">
-                  <span className="relative flex h-2.5 w-2.5">
-                    <span className="absolute inset-0 rounded-full bg-emerald-400/50 blur-sm" />
-                    <span className="relative h-2.5 w-2.5 animate-pulse rounded-full bg-emerald-400" />
-                  </span>
-                  <span>System operational</span>
-                </div>
-              </div>
-            </section>
-
-            {errorMessage ? (
-              <section className="rounded-[24px] border border-rose-400/18 bg-rose-500/8 px-5 py-4 text-sm text-rose-100 shadow-[0_0_0_1px_rgba(244,63,94,0.06)]">
-                <p className="font-medium">Some dashboard data could not be loaded.</p>
-                <p className="mt-1 text-rose-100/80">{errorMessage}</p>
-              </section>
-            ) : null}
-
-            <section
-              aria-label="Platform metrics"
-              className="grid grid-cols-1 gap-4 md:grid-cols-2 xl:grid-cols-4"
-            >
-              {isLoadingData
-                ? Array.from({ length: 4 }).map((_, index) => (
-                    <MetricSkeleton key={index} />
-                  ))
-                : metricCards.map((metric) => (
-                    <article
-                      key={metric.label}
-                      className="group rounded-[24px] border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-5 transition duration-200 hover:-translate-y-1 hover:border-white/[0.1] hover:bg-[rgba(255,255,255,0.04)]"
-                    >
-                      <div className="flex items-center justify-between">
-                        <p className="text-sm text-[#9CA3AF]">{metric.label}</p>
-                        <span
-                          className={`h-2.5 w-2.5 rounded-full ${
-                            metric.accent === "rose"
-                              ? "bg-rose-400"
-                              : metric.accent === "emerald"
-                                ? "bg-emerald-400"
-                                : metric.accent === "violet"
-                                  ? "bg-violet-400"
-                                  : "bg-blue-400"
-                          } shadow-[0_0_18px_currentColor]`}
-                        />
-                      </div>
-                      <p className="mt-6 font-mono text-3xl font-semibold tracking-tight text-[#F9FAFB]">
-                        {metric.value}
-                      </p>
-                      <p className="mt-3 text-sm text-[#6B7280]">{metric.subtext}</p>
-                    </article>
-                  ))}
-            </section>
-
-            <section className="rounded-[28px] border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-6 sm:p-7">
-              <div className="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-                <div>
-                  <p className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#9CA3AF]">
-                    Monitored repositories
-                  </p>
-                  <h2 className="mt-3 text-2xl font-semibold tracking-tight text-[#F9FAFB]">
-                    Repositories connected to GrepAI&apos;s webhook intelligence
-                    layer.
-                  </h2>
-                </div>
-                <Link
-                  href="/connect"
-                  className="inline-flex items-center rounded-xl border border-blue-400/20 bg-[linear-gradient(180deg,rgba(18,24,45,0.92)_0%,rgba(10,14,28,0.98)_100%)] px-4 py-2.5 text-sm font-medium text-[#F9FAFB] shadow-[0_0_0_1px_rgba(59,130,246,0.14)] transition duration-200 hover:-translate-y-0.5 hover:border-blue-300/30"
-                >
-                  Connect Repository <span className="ml-2">→</span>
-                </Link>
-              </div>
-
-              <div className="mt-6 grid gap-4">
-                {isLoadingData ? (
-                  Array.from({ length: 2 }).map((_, index) => (
-                    <RepositoryCardSkeleton key={index} />
-                  ))
-                ) : repoInsights.length > 0 ? (
-                  repoInsights.map((repo) => (
-                    <article
-                      key={repo.id}
-                      className="relative overflow-hidden rounded-[22px] border border-white/[0.06] bg-[#0B1020]/90 p-5 transition duration-200 hover:-translate-y-1 hover:border-blue-300/18"
-                    >
-                      <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(96,165,250,0.65),transparent)]" />
-                      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-                        <div>
-                          <div className="flex items-center gap-3">
-                            <h3 className="text-lg font-semibold text-[#F9FAFB]">
-                              {repo.fullName}
-                            </h3>
-                            <span className="inline-flex items-center gap-2 rounded-full border border-emerald-400/15 bg-emerald-500/10 px-3 py-1 text-xs text-emerald-100">
-                              <span className="h-2 w-2 animate-pulse rounded-full bg-emerald-400" />
-                              Watching for pull requests
-                            </span>
-                          </div>
-                          <div className="mt-4 grid gap-3 text-sm text-[#9CA3AF] sm:grid-cols-3">
-                            <p>
-                              Webhook:{" "}
-                              <span className="text-[#F9FAFB]">
-                                {repo.webhookId ? "Active" : "Pending"}
-                              </span>
-                            </p>
-                            <p>
-                              Last analyzed:{" "}
-                              <span className="font-mono text-[#F9FAFB]">
-                                {repo.latestAnalysis
-                                  ? formatRelativeTime(repo.latestAnalysis.createdAt)
-                                  : `Connected ${formatRelativeTime(repo.createdAt)}`}
-                              </span>
-                            </p>
-                            <p>
-                              PRs analyzed:{" "}
-                              <span className="font-mono text-[#F9FAFB]">
-                                {repo.analysisCount}
-                              </span>
-                            </p>
-                          </div>
-                        </div>
-
-                        <div className="flex items-center gap-2">
-                          <span className="h-2 w-2 rounded-full bg-blue-400 shadow-[0_0_18px_rgba(59,130,246,0.8)]" />
-                          <span className="font-mono text-[11px] uppercase tracking-[0.28em] text-[#60A5FA]">
-                            {repo.isActive ? "Active signal" : "Inactive signal"}
-                          </span>
-                        </div>
-                      </div>
-                    </article>
-                  ))
-                ) : (
-                  <RepositoryEmptyState />
-                )}
-              </div>
-            </section>
-
-            <section className="rounded-[28px] border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-6 sm:p-7">
-              <div>
-                <p className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#9CA3AF]">
-                  Recent risk reports
-                </p>
-                <h2 className="mt-3 text-2xl font-semibold tracking-tight text-[#F9FAFB]">
-                  Latest pull requests analyzed by GrepAI.
-                </h2>
-              </div>
-
-              {isLoadingData ? (
-                <div className="mt-6 grid gap-4">
-                  {Array.from({ length: 3 }).map((_, index) => (
-                    <ReportCardSkeleton key={index} />
-                  ))}
-                </div>
-              ) : reports.length > 0 ? (
-                <div className="mt-6 grid gap-4">
-                  {reports.map((report) => (
-                    <article
-                      key={report.id}
-                      className="rounded-[24px] border border-white/[0.06] bg-[#0B1020]/80 p-5 transition duration-200 hover:-translate-y-1 hover:border-white/[0.1]"
-                    >
-                      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-                        <div className="min-w-0 flex-1">
-                          <div className="flex flex-wrap items-center gap-3">
-                            <span className="font-mono text-xs uppercase tracking-[0.28em] text-[#60A5FA]">
-                              PR #{report.prNumber}
-                            </span>
-                            <span
-                              className={`inline-flex items-center gap-2 rounded-full border px-3 py-1 text-xs font-medium ${riskBadgeStyles(report.riskLevel)}`}
-                            >
-                              <span
-                                className={`h-2 w-2 rounded-full ${riskAccent(report.riskLevel)}`}
-                              />
-                              {report.riskLevel}
-                            </span>
-                          </div>
-                          <h3 className="mt-3 text-xl font-semibold tracking-tight text-[#F9FAFB]">
-                            {report.prTitle}
-                          </h3>
-                          <p className="mt-3 max-w-2xl text-sm leading-7 text-[#9CA3AF]">
-                            {report.summary}
-                          </p>
-                        </div>
-
-                        <div className="grid grid-cols-2 gap-3 text-sm text-[#9CA3AF] sm:min-w-[15rem]">
-                          <div>
-                            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-[#6B7280]">
-                              Confidence
-                            </p>
-                            <p className="mt-2 font-mono text-[#F9FAFB]">
-                              {report.confidence}%
-                            </p>
-                          </div>
-                          <div>
-                            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-[#6B7280]">
-                              Risk score
-                            </p>
-                            <p className="mt-2 font-mono text-[#F9FAFB]">
-                              {report.riskLevel}
-                            </p>
-                          </div>
-                          <div>
-                            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-[#6B7280]">
-                              Repo
-                            </p>
-                            <p className="mt-2 text-[#F9FAFB]">{report.repo.fullName}</p>
-                          </div>
-                          <div>
-                            <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-[#6B7280]">
-                              Time
-                            </p>
-                            <p className="mt-2 font-mono text-[#F9FAFB]">
-                              {formatRelativeTime(report.createdAt)}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-
-                      <div className="mt-5 flex items-center justify-between border-t border-white/[0.06] pt-4">
-                        <span className="text-sm text-[#6B7280]">
-                          Architecture-aware pull request intelligence
-                        </span>
-                        <a
-                          href="#"
-                          className="text-sm font-medium text-[#BFDBFE] transition hover:text-[#F9FAFB]"
-                        >
-                          View Report <span className="ml-1">→</span>
-                        </a>
-                      </div>
-                    </article>
-                  ))}
-                </div>
-              ) : (
-                <AnalysisEmptyState />
-              )}
-            </section>
-          </div>
-
-          <aside className="animate-[fadeUp_0.65s_ease-out]">
-            <section className="sticky top-28 rounded-[28px] border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-6">
-              <p className="font-mono text-[11px] uppercase tracking-[0.34em] text-[#9CA3AF]">
-                System activity
-              </p>
-              <h2 className="mt-3 text-xl font-semibold tracking-tight text-[#F9FAFB]">
-                Operational intelligence feed
-              </h2>
-              <div className="relative mt-6 space-y-6 before:absolute before:left-[0.42rem] before:top-1 before:h-[calc(100%-0.5rem)] before:w-px before:bg-white/[0.08]">
-                {systemActivity.map((item) => (
-                  <div key={`${item.time}-${item.label}`} className="relative pl-8">
-                    <span className="absolute left-0 top-1.5 flex h-3.5 w-3.5 items-center justify-center">
-                      <span className="absolute h-3.5 w-3.5 rounded-full bg-blue-400/15" />
-                      <span className="relative h-2.5 w-2.5 rounded-full bg-blue-400 shadow-[0_0_18px_rgba(59,130,246,0.8)]" />
-                    </span>
-                    <p className="font-mono text-[11px] uppercase tracking-[0.24em] text-[#60A5FA]">
-                      {item.time}
-                    </p>
-                    <p className="mt-2 text-sm font-medium text-[#F9FAFB]">
-                      {item.label}
-                    </p>
-                    <p className="mt-1 text-sm text-[#9CA3AF]">{item.detail}</p>
+            {isLoadingData ? (
+              <div className="mt-6 border-t border-[#2A2A2A]">
+                {Array.from({ length: 4 }).map((_, index) => (
+                  <div
+                    key={index}
+                    className={`${index !== 0 ? "border-t border-[#2A2A2A]" : ""} space-y-3 py-4`}
+                  >
+                    <div className="h-4 w-40 bg-white/6" />
+                    <div className="h-6 w-2/3 bg-white/6" />
+                    <div className="h-4 w-1/2 bg-white/6" />
                   </div>
                 ))}
               </div>
-            </section>
-          </aside>
-        </div>
-      </main>
-    </div>
-  );
-}
+            ) : prioritizedReports.length > 0 ? (
+              <div className="mt-6 border-t border-[#2A2A2A]">
+                {prioritizedReports.map((report, index) => (
+                  <article
+                    key={report.id}
+                    className={`${index !== 0 ? "border-t border-[#2A2A2A]" : ""} py-4 transition-colors duration-150 hover:bg-white/[0.015]`}
+                  >
+                    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+                      <div className="min-w-0 flex-1">
+                        <div className="flex flex-wrap items-center gap-3">
+                          <span
+                            className={`inline-flex items-center gap-2 border px-2 py-1 font-[var(--font-ibm-plex-mono)] text-[10px] uppercase tracking-[0.16em] ${riskTone(report.riskLevel)}`}
+                          >
+                            <span
+                              className={`h-1.5 w-1.5 ${
+                                report.riskLevel === "HIGH"
+                                  ? "bg-[#D65757]"
+                                  : report.riskLevel === "MEDIUM"
+                                    ? "bg-[#B8884B]"
+                                    : "bg-[#16A34A]"
+                              }`}
+                            />
+                            PR #{report.prNumber} — {riskText(report.riskLevel)}
+                          </span>
+                          <span className="font-[var(--font-ibm-plex-mono)] text-[10px] uppercase tracking-[0.18em] text-white/42">
+                            {report.confidence}% confidence • {formatRelativeTime(report.createdAt)}
+                          </span>
+                        </div>
+                        <h3 className="mt-3 text-[18px] font-medium text-[#F5F5F2]">
+                          {report.prTitle}
+                        </h3>
+                        <p className="mt-2 max-w-[780px] text-[14px] leading-6 text-white/68">
+                          {report.summary}
+                        </p>
+                        <p className="mt-2 text-[13px] uppercase tracking-[0.08em] text-white/42">
+                          {report.repo.fullName}
+                        </p>
+                      </div>
+                      <div className="shrink-0 sm:pl-4">
+                        <div className="flex flex-wrap justify-start gap-2 sm:max-w-[260px] sm:justify-end">
+                          {deriveAffectedModules(`${report.prTitle} ${report.summary}`)
+                            .slice(0, 3)
+                            .map((module) => (
+                              <span
+                                key={module}
+                                className="border border-[#2A2A2A] px-2 py-1 font-[var(--font-ibm-plex-mono)] text-[10px] uppercase tracking-[0.12em] text-white/62"
+                              >
+                                {module}
+                              </span>
+                            ))}
+                        </div>
+                      </div>
+                    </div>
+                  </article>
+                ))}
+              </div>
+            ) : (
+              <div className="mt-6 border-t border-[#2A2A2A] py-8">
+                <p className="font-[var(--font-ibm-plex-mono)] text-[11px] uppercase tracking-[0.2em] text-white/42">
+                  NO PR ANALYSES YET
+                </p>
+                <p className="mt-3 font-[var(--font-ibm-plex-mono)] text-[13px] tracking-[0.02em] text-white/58">
+                  {"> open or update a pull request to trigger analysis..."}
+                </p>
+              </div>
+            )}
+          </section>
 
-function MetricSkeleton() {
-  return (
-    <article className="rounded-[24px] border border-white/[0.06] bg-[rgba(255,255,255,0.03)] p-5">
-      <div className="flex items-center justify-between">
-        <div className="h-4 w-28 rounded-full bg-white/[0.05]" />
-        <div className="h-2.5 w-2.5 rounded-full bg-white/[0.08]" />
-      </div>
-      <div className="mt-6 h-10 w-20 rounded-full bg-white/[0.05]" />
-      <div className="mt-3 h-4 w-32 rounded-full bg-white/[0.04]" />
-    </article>
-  );
-}
-
-function RepositoryCardSkeleton() {
-  return (
-    <article className="relative overflow-hidden rounded-[22px] border border-white/[0.06] bg-[#0B1020]/90 p-5">
-      <div className="pointer-events-none absolute inset-x-5 top-0 h-px bg-[linear-gradient(90deg,transparent,rgba(96,165,250,0.45),transparent)]" />
-      <div className="flex flex-col gap-5 lg:flex-row lg:items-center lg:justify-between">
-        <div className="flex-1">
-          <div className="h-7 w-48 rounded-full bg-white/[0.05]" />
-          <div className="mt-4 grid gap-3 sm:grid-cols-3">
-            <div className="h-4 w-28 rounded-full bg-white/[0.04]" />
-            <div className="h-4 w-32 rounded-full bg-white/[0.04]" />
-            <div className="h-4 w-24 rounded-full bg-white/[0.04]" />
-          </div>
-        </div>
-        <div className="h-4 w-24 rounded-full bg-white/[0.04]" />
-      </div>
-    </article>
-  );
-}
-
-function ReportCardSkeleton() {
-  return (
-    <article className="rounded-[24px] border border-white/[0.06] bg-[#0B1020]/80 p-5">
-      <div className="flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
-        <div className="flex-1">
-          <div className="h-5 w-32 rounded-full bg-white/[0.05]" />
-          <div className="mt-3 h-8 w-64 rounded-full bg-white/[0.05]" />
-          <div className="mt-3 h-4 w-full max-w-2xl rounded-full bg-white/[0.04]" />
-          <div className="mt-2 h-4 w-2/3 rounded-full bg-white/[0.04]" />
-        </div>
-        <div className="grid grid-cols-2 gap-3 sm:min-w-[15rem]">
-          {Array.from({ length: 4 }).map((_, index) => (
-            <div key={index}>
-              <div className="h-3 w-16 rounded-full bg-white/[0.04]" />
-              <div className="mt-2 h-4 w-12 rounded-full bg-white/[0.05]" />
+          <section className="border border-[#2A2A2A] px-6 py-6">
+            <div className="flex items-center justify-between gap-4">
+              <div>
+                <SectionLabel>LIVE EVENT PANEL</SectionLabel>
+                <h2 className="mt-4 text-[18px] font-medium text-[#F5F5F2]">
+                  Architecture heartbeat
+                </h2>
+              </div>
+              <span className="inline-flex items-center gap-2 font-[var(--font-ibm-plex-mono)] text-[10px] uppercase tracking-[0.18em] text-[#16A34A]">
+                <span className="h-1.5 w-1.5 animate-[statusPulse_2.8s_ease-in-out_infinite] bg-[#16A34A]" />
+                Active
+              </span>
             </div>
-          ))}
+
+            <div className="mt-6 border-t border-[#2A2A2A]">
+              {systemActivity.map((item, index) => (
+                <div
+                  key={`${item.time}-${item.label}`}
+                  className={`${index !== 0 ? "border-t border-[#2A2A2A]" : ""} py-4`}
+                >
+                  <div className="flex items-start gap-3">
+                    <span className="mt-[6px] h-1.5 w-1.5 shrink-0 bg-white/48" />
+                    <div className="min-w-0">
+                      <p className="font-[var(--font-ibm-plex-mono)] text-[11px] uppercase tracking-[0.18em] text-white/72">
+                        [{item.time}] {item.label}
+                      </p>
+                      <p className="mt-2 font-[var(--font-ibm-plex-mono)] text-[12px] uppercase tracking-[0.12em] text-white/42">
+                        {item.detail}
+                      </p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </section>
         </div>
-      </div>
-      <div className="mt-5 border-t border-white/[0.06] pt-4">
-        <div className="h-4 w-48 rounded-full bg-white/[0.04]" />
-      </div>
-    </article>
-  );
-}
 
-function RepositoryEmptyState() {
-  return (
-    <div className="mt-6 rounded-[24px] border border-dashed border-white/[0.1] bg-[#0B1020]/60 px-6 py-14 text-center">
-      <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.03]">
-        <span className="h-3 w-3 rounded-full bg-blue-400 shadow-[0_0_18px_rgba(59,130,246,0.8)]" />
-      </span>
-      <h3 className="mt-5 text-xl font-semibold text-[#F9FAFB]">
-        No repositories connected yet.
-      </h3>
-      <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-[#9CA3AF]">
-        Connect a GitHub repository to activate GrepAI pull request monitoring.
-      </p>
-      <Link
-        href="/connect"
-        className="mt-6 inline-flex items-center rounded-xl border border-blue-400/20 bg-[linear-gradient(180deg,rgba(18,24,45,0.92)_0%,rgba(10,14,28,0.98)_100%)] px-4 py-2.5 text-sm font-medium text-[#F9FAFB] transition duration-200 hover:-translate-y-0.5 hover:border-blue-300/30"
-      >
-        Connect Repository <span className="ml-2">→</span>
-      </Link>
-    </div>
-  );
-}
+          <section className="mt-6 border border-[#2A2A2A] px-6 py-6 lg:px-8">
+          <div>
+            <SectionLabel>CONNECTED REPOSITORIES</SectionLabel>
+            <h2 className="mt-4 text-[20px] font-medium text-[#F5F5F2]">
+              Monitored systems
+            </h2>
+            <p className="mt-2 text-[13px] leading-6 text-white/52">
+              Repository monitoring surfaces current webhook state and latest risk
+              posture across connected systems.
+            </p>
+          </div>
 
-function AnalysisEmptyState() {
-  return (
-    <div className="mt-6 rounded-[24px] border border-dashed border-white/[0.1] bg-[#0B1020]/60 px-6 py-14 text-center">
-      <span className="mx-auto flex h-14 w-14 items-center justify-center rounded-full border border-white/[0.08] bg-white/[0.03]">
-        <span className="h-3 w-3 rounded-full bg-blue-400 shadow-[0_0_18px_rgba(59,130,246,0.8)]" />
-      </span>
-      <h3 className="mt-5 text-xl font-semibold text-[#F9FAFB]">
-        No PR analyses yet.
-      </h3>
-      <p className="mx-auto mt-3 max-w-xl text-sm leading-7 text-[#9CA3AF]">
-        Open or update a pull request to trigger GrepAI analysis.
-      </p>
-      <Link
-        href="/connect"
-        className="mt-6 inline-flex items-center rounded-xl border border-blue-400/20 bg-[linear-gradient(180deg,rgba(18,24,45,0.92)_0%,rgba(10,14,28,0.98)_100%)] px-4 py-2.5 text-sm font-medium text-[#F9FAFB] transition duration-200 hover:-translate-y-0.5 hover:border-blue-300/30"
-      >
-        Connect Repository <span className="ml-2">→</span>
-      </Link>
+          {isLoadingData ? (
+            <div className="mt-6 grid gap-4 border-t border-[#2A2A2A] pt-5 md:grid-cols-2 xl:grid-cols-3">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="space-y-3 border border-[#2A2A2A] px-4 py-4">
+                  <div className="h-5 w-2/3 bg-white/6" />
+                  <div className="h-4 w-1/2 bg-white/6" />
+                  <div className="h-4 w-3/4 bg-white/6" />
+                </div>
+              ))}
+            </div>
+          ) : repoInsights.length > 0 ? (
+            <div className="mt-6 grid gap-4 border-t border-[#2A2A2A] pt-5 md:grid-cols-2 xl:grid-cols-3">
+              {repoInsights.map((repo) => (
+                <article
+                  key={repo.id}
+                  className="border border-[#2A2A2A] px-4 py-4 transition-colors duration-150 hover:bg-white/[0.015]"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <h3 className="text-[16px] font-medium text-[#F5F5F2]">
+                      {repo.fullName}
+                    </h3>
+                    <span
+                      className={`inline-flex items-center gap-2 border px-2 py-1 font-[var(--font-ibm-plex-mono)] text-[10px] uppercase tracking-[0.16em] ${
+                        repo.latestAnalysis
+                          ? riskTone(repo.latestAnalysis.riskLevel)
+                          : "border-[#2A2A2A] text-white/62"
+                      }`}
+                    >
+                      <span
+                        className={`h-1.5 w-1.5 ${
+                          repo.latestAnalysis?.riskLevel === "HIGH"
+                            ? "bg-[#D65757]"
+                            : repo.latestAnalysis?.riskLevel === "MEDIUM"
+                              ? "bg-[#B8884B]"
+                              : repo.latestAnalysis
+                                ? "bg-[#16A34A]"
+                                : "bg-white/24"
+                        }`}
+                      />
+                      {repo.latestAnalysis
+                        ? riskText(repo.latestAnalysis.riskLevel)
+                        : "MONITORING"}
+                    </span>
+                  </div>
+                  <p className="mt-3 text-[13px] leading-6 text-white/58">
+                    {repo.webhookId
+                      ? `Webhook active • last analysis ${
+                          repo.latestAnalysis
+                            ? formatRelativeTime(repo.latestAnalysis.createdAt)
+                            : formatRelativeTime(repo.createdAt)
+                        }`
+                      : "Awaiting webhook activation"}
+                  </p>
+                  <p className="mt-2 font-[var(--font-ibm-plex-mono)] text-[11px] uppercase tracking-[0.14em] text-white/42">
+                    {repo.latestAnalysis
+                      ? `${repo.analysisCount} analyses • ${
+                          repo.affectedModules.length > 0
+                            ? repo.affectedModules.join(" • ")
+                            : "downstream risk mapped"
+                        }`
+                      : "Monitoring active • awaiting PR activity"}
+                  </p>
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="mt-6 border-t border-[#2A2A2A] py-8">
+              <p className="font-[var(--font-ibm-plex-mono)] text-[11px] uppercase tracking-[0.2em] text-white/42">
+                NO REPOSITORIES CONNECTED YET
+              </p>
+              <p className="mt-3 max-w-[620px] text-[14px] leading-6 text-white/58">
+                Connect a repository to start monitoring pull request risk,
+                architecture impact, and merge intelligence inside GitHub.
+              </p>
+              <button
+                type="button"
+                onClick={() => router.push("/connect")}
+                className="mt-5 inline-flex h-12 items-center justify-center gap-3 border border-white/22 bg-white/5 px-5 text-[11px] font-bold uppercase tracking-[0.16em] text-[#F5F5F2] transition-colors duration-150 hover:border-white/32 hover:bg-white/[0.08]"
+              >
+                <GithubMark className="h-4 w-4 fill-current" />
+                <span>Connect Repository</span>
+              </button>
+            </div>
+          )}
+        </section>
+      </main>
     </div>
   );
 }
