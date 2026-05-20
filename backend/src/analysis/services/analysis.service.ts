@@ -9,7 +9,6 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import {
-  Finding,
   PRAnalysisInput,
   RiskLevel,
   RiskReport,
@@ -44,10 +43,8 @@ export class AnalysisService {
     try {
       const anthropic = new Anthropic({ apiKey });
       const response = await anthropic.messages.create({
-        model:
-          this.configService.get<string>('CLAUDE_MODEL') ??
-          'claude-sonnet-4-5',
-        max_tokens: 2048,
+        model: this.configService.get<string>('CLAUDE_MODEL') ?? 'claude-sonnet-4-5-20250929',
+        max_tokens: 1000,
         system: this.buildSystemPrompt(),
         messages: [
           {
@@ -131,12 +128,20 @@ export class AnalysisService {
   private buildSystemPrompt(): string {
     return [
       'You are a senior staff engineer reviewing a production pull request.',
-      'Analyze the PR for risky code modifications, breaking changes, authentication/security risks, dependency risks, circular dependency possibilities, cascade/downstream impact, architectural inconsistencies, knowledge silo risk, and high-impact core module modifications.',
+      'Analyze the PR for risky code modifications, breaking changes, authentication or security risks, dependency risks, circular dependency possibilities, cascade or downstream impact, architectural inconsistencies, knowledge silo risk, and high-impact core module modifications.',
+      'Be concise, technical, and operational.',
+      'Do not speculate about developer intent.',
+      'Summary must be at most 2 sentences.',
+      'Recommendation must be 1 sentence maximum.',
+      'Return a maximum of 3 findings.',
+      'Impact path must contain the most relevant affected files, functions, or system steps only.',
+      'Findings must be concise and describe what broke, why it matters, and the affected system or component.',
+      'Use concise engineering language suitable for a GitHub pull request comment.',
       'Return JSON ONLY.',
       'Do not use markdown.',
       'Do not include explanations outside JSON.',
       'Use this exact JSON shape:',
-      '{"riskLevel":"LOW|MEDIUM|HIGH","summary":"string","findings":[{"type":"string","severity":"LOW|MEDIUM|HIGH","description":"string","file":"optional string","line":"optional number"}],"recommendation":"string"}',
+      '{"riskLevel":"LOW|MEDIUM|HIGH","confidence":94,"summary":"string","impactPath":["string"],"findings":["string"],"recommendation":"string"}',
     ].join('\n');
   }
 
@@ -189,12 +194,14 @@ export class AnalysisService {
 
       return {
         riskLevel: this.normalizeRiskLevel(parsed.riskLevel),
-        summary: this.normalizeString(
+        confidence: this.normalizeConfidence(parsed.confidence),
+        summary: this.normalizeSummary(
           parsed.summary,
           'Automated analysis completed without a detailed summary.',
         ),
+        impactPath: this.normalizeImpactPath(parsed.impactPath),
         findings: this.normalizeFindings(parsed.findings),
-        recommendation: this.normalizeString(
+        recommendation: this.normalizeRecommendation(
           parsed.recommendation,
           'Perform a focused manual review before merging.',
         ),
@@ -232,47 +239,78 @@ export class AnalysisService {
       : 'LOW';
   }
 
-  private normalizeFindings(value: unknown): Finding[] {
+  private normalizeConfidence(value: unknown): number {
+    if (typeof value !== 'number' || !Number.isFinite(value)) {
+      return 0;
+    }
+
+    return Math.max(0, Math.min(100, Math.round(value)));
+  }
+
+  private normalizeImpactPath(value: unknown): string[] {
     if (!Array.isArray(value)) {
       return [];
     }
 
     return value
-      .map((finding): Finding | null => {
-        if (!finding || typeof finding !== 'object') {
-          return null;
-        }
+      .map((entry) => this.normalizeString(entry, ''))
+      .filter((entry) => entry.length > 0)
+      .slice(0, 6);
+  }
 
-        const candidate = finding as Partial<Finding>;
+  private normalizeFindings(value: unknown): string[] {
+    if (!Array.isArray(value)) {
+      return [];
+    }
 
-        return {
-          type: this.normalizeString(candidate.type, 'GENERAL'),
-          severity: this.normalizeRiskLevel(candidate.severity),
-          description: this.normalizeString(
-            candidate.description,
-            'Potential issue detected, but details were incomplete.',
-          ),
-          file:
-            typeof candidate.file === 'string' && candidate.file.trim()
-              ? candidate.file
-              : undefined,
-          line:
-            typeof candidate.line === 'number' && Number.isFinite(candidate.line)
-              ? candidate.line
-              : undefined,
-        };
-      })
-      .filter((finding): finding is Finding => finding !== null);
+    return value
+      .map((finding) => this.truncateText(this.normalizeString(finding, ''), 160))
+      .filter((finding) => finding.length > 0)
+      .slice(0, 3);
+  }
+
+  private normalizeSummary(value: unknown, fallback: string): string {
+    return this.limitSentences(
+      this.truncateText(this.normalizeString(value, fallback), 260),
+      2,
+    );
+  }
+
+  private normalizeRecommendation(value: unknown, fallback: string): string {
+    return this.limitSentences(
+      this.truncateText(this.normalizeString(value, fallback), 180),
+      1,
+    );
   }
 
   private normalizeString(value: unknown, fallback: string): string {
     return typeof value === 'string' && value.trim() ? value.trim() : fallback;
   }
 
+  private truncateText(value: string, maxLength: number): string {
+    return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1).trimEnd()}…`;
+  }
+
+  private limitSentences(value: string, maxSentences: number): string {
+    const matches = value.match(/[^.!?]+[.!?]?/g);
+
+    if (!matches) {
+      return value;
+    }
+
+    return matches
+      .slice(0, maxSentences)
+      .map((sentence) => sentence.trim())
+      .join(' ')
+      .trim();
+  }
+
   private buildFallbackReport(reason: string): RiskReport {
     return {
       riskLevel: 'LOW',
+      confidence: 0,
       summary: `Automated GrepAI analysis could not complete reliably. ${reason}`,
+      impactPath: [],
       findings: [],
       recommendation:
         'Perform a manual review of this pull request before merging.',

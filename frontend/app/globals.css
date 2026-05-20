@@ -5,19 +5,16 @@
 }
 
 html {
-  background: #050816;
+  background: #050505;
 }
 
 body {
   margin: 0;
   min-height: 100vh;
-  font-family:
-    "Geist",
-    "Inter",
-    "SF Pro Display",
-    "Segoe UI",
-    system-ui,
-    sans-serif;
+  background: #050505;
+  color: #f5f5f2;
+  font-family: var(--font-space-grotesk), "Helvetica Neue", Arial, sans-serif;
+  overflow-x: hidden;
 }
 
 a {
@@ -30,101 +27,52 @@ a {
 }
 
 ::selection {
-  background: rgba(59, 130, 246, 0.26);
-  color: #f9fafb;
+  background: rgba(255, 255, 255, 0.16);
+  color: #ffffff;
 }
 
-@keyframes fadeUp {
-  from {
+@keyframes editorialCursor {
+  0%,
+  48% {
+    opacity: 1;
+  }
+  52%,
+  100% {
     opacity: 0;
-    transform: translateY(14px);
   }
-  to {
+}
+
+@keyframes statusPulse {
+  0%,
+  100% {
     opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-@keyframes topologyPulse {
-  0%,
-  100% {
-    opacity: 0.45;
-    transform: translateY(0);
   }
   50% {
-    opacity: 0.82;
-    transform: translateY(-2px);
+    opacity: 0.42;
   }
 }
 
-@keyframes topologyFloat {
-  0%,
-  100% {
-    transform: translateY(0) translateX(0);
-  }
-  50% {
-    transform: translateY(-4px) translateX(2px);
-  }
-}
-
-@keyframes clusterPulse {
-  0%,
-  100% {
-    opacity: 0.18;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.34;
-    transform: scale(1.035);
-  }
-}
-
-@keyframes dashFlow {
-  from {
-    stroke-dashoffset: 0;
-  }
-  to {
-    stroke-dashoffset: -72;
-  }
-}
-
-@keyframes corePulse {
-  0%,
-  100% {
-    opacity: 0.78;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.035);
-  }
-}
-
-@keyframes impactPulse {
-  0%,
-  100% {
-    opacity: 0.5;
-    transform: translate(-50%, 0);
-  }
-  50% {
-    opacity: 1;
-    transform: translate(-50%, 12px);
-  }
-}
-
-@keyframes flowAlong {
+@keyframes callbackProgress {
   0% {
-    left: 0;
-    opacity: 0;
+    transform: translateX(-110%);
+    opacity: 0.3;
   }
-  8% {
-    opacity: 1;
-  }
-  92% {
+  50% {
     opacity: 1;
   }
   100% {
-    left: calc(100% - 2.5rem);
+    transform: translateX(250%);
+    opacity: 0.3;
+  }
+}
+
+@keyframes surfaceFade {
+  0% {
     opacity: 0;
+    transform: translateY(10px);
+  }
+  100% {
+    opacity: 1;
+    transform: translateY(0);
   }
 }

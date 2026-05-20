@@ -17,17 +17,11 @@ export interface PRAnalysisInput {
   fullDiff: string;
 }
 
-export interface Finding {
-  type: string;
-  severity: RiskLevel;
-  description: string;
-  file?: string;
-  line?: number;
-}
-
 export interface RiskReport {
   riskLevel: RiskLevel;
+  confidence: number;
   summary: string;
-  findings: Finding[];
+  impactPath: string[];
+  findings: string[];
   recommendation: string;
 }
