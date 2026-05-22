@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   HttpException,
   HttpStatus,
   Injectable,
@@ -17,6 +18,14 @@ export interface GithubPRFile {
   changes: number;
   patch: string | null;
   blobUrl: string | null;
+}
+
+export interface GithubUserRepo {
+  owner: string;
+  name: string;
+  fullName: string;
+  private: boolean;
+  description: string | null;
 }
 
 type GithubApiErrorShape = {
@@ -56,7 +65,10 @@ export class GithubService {
         blobUrl: file.blob_url ?? null,
       }));
     } catch (error) {
-      this.handleGithubApiError(error, `fetch PR files for ${owner}/${repo}#${prNumber}`);
+      this.handleGithubApiError(
+        error,
+        `fetch PR files for ${owner}/${repo}#${prNumber}`,
+      );
     }
   }
 
@@ -80,9 +92,14 @@ export class GithubService {
         },
       );
 
-      return typeof response.data === 'string' ? response.data : String(response.data);
+      return typeof response.data === 'string'
+        ? response.data
+        : JSON.stringify(response.data);
     } catch (error) {
-      this.handleGithubApiError(error, `fetch PR diff for ${owner}/${repo}#${prNumber}`);
+      this.handleGithubApiError(
+        error,
+        `fetch PR diff for ${owner}/${repo}#${prNumber}`,
+      );
     }
   }
 
@@ -106,7 +123,37 @@ export class GithubService {
 
       return response.data;
     } catch (error) {
-      this.handleGithubApiError(error, `post PR comment for ${owner}/${repo}#${prNumber}`);
+      this.handleGithubApiError(
+        error,
+        `post PR comment for ${owner}/${repo}#${prNumber}`,
+      );
+    }
+  }
+
+  async getUserRepos(accessToken: string): Promise<GithubUserRepo[]> {
+    try {
+      const octokit = await this.createClient(accessToken);
+      const repos = await octokit.paginate(
+        octokit.rest.repos.listForAuthenticatedUser,
+        {
+          per_page: 100,
+          sort: 'updated',
+          affiliation: 'owner,collaborator,organization_member',
+        },
+      );
+
+      return repos.map((repo) => ({
+        owner: repo.owner.login,
+        name: repo.name,
+        fullName: repo.full_name,
+        private: repo.private,
+        description: repo.description,
+      }));
+    } catch (error) {
+      this.handleGithubApiError(
+        error,
+        'fetch authenticated GitHub repositories',
+      );
     }
   }
 
@@ -114,9 +161,12 @@ export class GithubService {
     accessToken: string,
     owner: string,
     repo: string,
+    currentWebhookId?: string | null,
   ): Promise<string | null> {
     const webhookUrl = this.configService.get<string>('WEBHOOK_URL');
-    const webhookSecret = this.configService.get<string>('GITHUB_WEBHOOK_SECRET');
+    const webhookSecret = this.configService.get<string>(
+      'GITHUB_WEBHOOK_SECRET',
+    );
 
     if (!webhookUrl || !webhookSecret) {
       this.logger.warn(
@@ -127,6 +177,10 @@ export class GithubService {
 
     try {
       const octokit = await this.createClient(accessToken);
+      this.logger.log(
+        `Ensuring webhook for ${owner}/${repo} using target URL ${webhookUrl}`,
+      );
+
       const existingHook = await this.findExistingPullRequestWebhook(
         octokit,
         owner,
@@ -139,6 +193,24 @@ export class GithubService {
           `Webhook already exists for ${owner}/${repo}: ${existingHook.id}`,
         );
         return String(existingHook.id);
+      }
+
+      if (currentWebhookId) {
+        const updatedWebhookId = await this.tryUpdateExistingWebhook(
+          octokit,
+          owner,
+          repo,
+          currentWebhookId,
+          webhookUrl,
+          webhookSecret,
+        );
+
+        if (updatedWebhookId) {
+          this.logger.log(
+            `Updated existing webhook ${updatedWebhookId} for ${owner}/${repo}`,
+          );
+          return updatedWebhookId;
+        }
       }
 
       const response = await octokit.rest.repos.createWebhook({
@@ -157,7 +229,10 @@ export class GithubService {
     } catch (error) {
       const { status, message } = this.extractGithubErrorDetails(error);
 
-      if (status === 422 && message.toLowerCase().includes('hook already exists')) {
+      if (
+        status === 422 &&
+        message.toLowerCase().includes('hook already exists')
+      ) {
         this.logger.warn(`Webhook already exists for ${owner}/${repo}.`);
         return null;
       }
@@ -169,13 +244,53 @@ export class GithubService {
     }
   }
 
+  async verifyRepositoryAccess(
+    accessToken: string,
+    owner: string,
+    repo: string,
+  ): Promise<boolean> {
+    try {
+      const octokit = await this.createClient(accessToken);
+
+      await octokit.rest.repos.get({
+        owner,
+        repo,
+      });
+
+      return true;
+    } catch (error) {
+      const { status, message } = this.extractGithubErrorDetails(error);
+
+      if (status === 404 || status === 403) {
+        this.logger.warn(
+          `Repository ${owner}/${repo} is not accessible on GitHub: ${message}`,
+        );
+        return false;
+      }
+
+      if (status === 401) {
+        this.logger.warn(
+          `Repository verification failed for ${owner}/${repo}: invalid GitHub access token.`,
+        );
+        return false;
+      }
+
+      this.logger.error(
+        `Failed to verify repository ${owner}/${repo} on GitHub: ${message}`,
+      );
+
+      throw new BadRequestException('Repository not found on GitHub');
+    }
+  }
+
   private async createClient(accessToken: string): Promise<Octokit> {
     const { Octokit } = await this.loadOctokitModule();
 
     return new Octokit({
       auth: accessToken,
       baseUrl: this.configService.get<string>('GITHUB_API_BASE_URL'),
-      userAgent: this.configService.get<string>('GITHUB_USER_AGENT') ?? 'GrepAI/1.0',
+      userAgent:
+        this.configService.get<string>('GITHUB_USER_AGENT') ?? 'GrepAI/1.0',
     });
   }
 
@@ -207,7 +322,51 @@ export class GithubService {
     });
   }
 
-  private extractGithubErrorDetails(error: unknown): Required<GithubApiErrorShape> {
+  private async tryUpdateExistingWebhook(
+    octokit: Octokit,
+    owner: string,
+    repo: string,
+    webhookId: string,
+    webhookUrl: string,
+    webhookSecret: string,
+  ): Promise<string | null> {
+    const parsedWebhookId = Number.parseInt(webhookId, 10);
+
+    if (!Number.isFinite(parsedWebhookId)) {
+      this.logger.warn(
+        `Stored webhook id "${webhookId}" for ${owner}/${repo} is invalid; creating a new webhook instead.`,
+      );
+      return null;
+    }
+
+    try {
+      await octokit.rest.repos.updateWebhook({
+        owner,
+        repo,
+        hook_id: parsedWebhookId,
+        config: {
+          url: webhookUrl,
+          content_type: 'json',
+          secret: webhookSecret,
+        },
+        events: ['pull_request'],
+        active: true,
+      });
+
+      return String(parsedWebhookId);
+    } catch (error) {
+      const { status, message } = this.extractGithubErrorDetails(error);
+
+      this.logger.warn(
+        `Failed to update existing webhook ${webhookId} for ${owner}/${repo}: ${message} (${status})`,
+      );
+      return null;
+    }
+  }
+
+  private extractGithubErrorDetails(
+    error: unknown,
+  ): Required<GithubApiErrorShape> {
     return {
       status:
         typeof error === 'object' &&
@@ -232,7 +391,9 @@ export class GithubService {
     this.logger.error(`Failed to ${context}: ${message}`);
 
     if (status === 401 || status === 403) {
-      throw new UnauthorizedException(`GitHub access denied while trying to ${context}.`);
+      throw new UnauthorizedException(
+        `GitHub access denied while trying to ${context}.`,
+      );
     }
 
     if (status === 429) {

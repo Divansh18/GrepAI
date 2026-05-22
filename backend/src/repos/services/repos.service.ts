@@ -1,4 +1,5 @@
 import {
+  BadRequestException,
   Injectable,
   InternalServerErrorException,
   Logger,
@@ -8,6 +9,7 @@ import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
 import { GithubService } from '../../github/services/github.service';
+import type { GithubUserRepo } from '../../github/services/github.service';
 import { User } from '../../users/entities/user.entity';
 import { Repo } from '../entities/repo.entity';
 
@@ -23,13 +25,19 @@ export class ReposService {
     private readonly githubService: GithubService,
   ) {}
 
-  async connectRepo(userId: number, owner: string, name: string): Promise<Repo> {
+  async connectRepo(
+    userId: number,
+    owner: string,
+    name: string,
+  ): Promise<Repo> {
     const normalizedOwner = owner.trim();
     const normalizedName = name.trim();
     const fullName = `${normalizedOwner}/${normalizedName}`;
 
     try {
-      this.logger.log(`Repository connection started for user ${userId}: ${fullName}`);
+      this.logger.log(
+        `Repository connection started for user ${userId}: ${fullName}`,
+      );
 
       const existingRepo = await this.repoRepository.findOne({
         where: {
@@ -41,8 +49,26 @@ export class ReposService {
       });
 
       if (existingRepo) {
-        this.logger.log(`Repository already connected for user ${userId}: ${fullName}`);
-        return existingRepo;
+        this.logger.log(
+          `Repository already connected for user ${userId}: ${fullName}`,
+        );
+
+        const user = await this.userRepository.findOne({
+          where: { id: userId },
+        });
+
+        if (!user) {
+          throw new NotFoundException(`User ${userId} was not found.`);
+        }
+
+        await this.attachWebhookToRepository(existingRepo, user.accessToken);
+
+        return this.repoRepository.findOneOrFail({
+          where: { id: existingRepo.id },
+          relations: {
+            user: true,
+          },
+        });
       }
 
       const user = await this.userRepository.findOne({
@@ -51,6 +77,21 @@ export class ReposService {
 
       if (!user) {
         throw new NotFoundException(`User ${userId} was not found.`);
+      }
+
+      this.logger.log(`Verifying repository exists on GitHub: ${fullName}`);
+
+      const repositoryExists = await this.githubService.verifyRepositoryAccess(
+        user.accessToken,
+        normalizedOwner,
+        normalizedName,
+      );
+
+      if (!repositoryExists) {
+        this.logger.warn(
+          `Repository not found on GitHub for user ${userId}: ${fullName}`,
+        );
+        throw new BadRequestException('Repository not found on GitHub');
       }
 
       const repo = this.repoRepository.create({
@@ -75,7 +116,10 @@ export class ReposService {
         },
       });
     } catch (error) {
-      if (error instanceof NotFoundException) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof BadRequestException
+      ) {
         throw error;
       }
 
@@ -127,6 +171,26 @@ export class ReposService {
     }
   }
 
+  async getUserGithubRepos(userId: number): Promise<GithubUserRepo[]> {
+    this.logger.log(`Fetching GitHub repositories for user ${userId}`);
+
+    const user = await this.userRepository.findOne({
+      where: { id: userId },
+    });
+
+    if (!user) {
+      throw new NotFoundException(`User ${userId} was not found.`);
+    }
+
+    const githubRepos = await this.githubService.getUserRepos(user.accessToken);
+
+    this.logger.log(
+      `Fetched ${githubRepos.length} GitHub repositories for user ${userId}`,
+    );
+
+    return githubRepos;
+  }
+
   async findUserByRepo(owner: string, repoName: string): Promise<User | null> {
     const repo = await this.repoRepository.findOne({
       where: {
@@ -152,6 +216,7 @@ export class ReposService {
       accessToken,
       repo.owner,
       repo.name,
+      repo.webhookId,
     );
 
     if (!webhookId) {

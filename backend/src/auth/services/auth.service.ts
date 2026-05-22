@@ -21,7 +21,9 @@ export class AuthService {
 
   async validateOrCreateUser(profile: GithubOAuthUser): Promise<User> {
     if (!profile.githubId || !profile.username) {
-      throw new UnauthorizedException('GitHub profile is missing required data.');
+      throw new UnauthorizedException(
+        'GitHub profile is missing required data.',
+      );
     }
 
     try {
@@ -66,7 +68,9 @@ export class AuthService {
         expiresIn: '7d',
       });
     } catch {
-      throw new InternalServerErrorException('Unable to generate access token.');
+      throw new InternalServerErrorException(
+        'Unable to generate access token.',
+      );
     }
   }
 }

@@ -37,13 +37,15 @@ export class WebhookService {
     private readonly analysisRepository: Repository<PrAnalysis>,
   ) {}
 
-  async handleGithubWebhook(
+  handleGithubWebhook(
     rawBody: Buffer | undefined,
     signatureHeader: string | undefined,
     eventType: string | undefined,
     payload: GithubWebhookDto | undefined,
-  ): Promise<void> {
+  ): void {
+    this.logger.log('Webhook received');
     this.verifyGithubSignature(rawBody, signatureHeader);
+    this.logger.log('Webhook signature verified');
 
     if (!eventType) {
       throw new BadRequestException('Missing x-github-event header.');
@@ -53,13 +55,18 @@ export class WebhookService {
       throw new BadRequestException('Missing GitHub webhook payload.');
     }
 
-    this.logger.log(`Received GitHub webhook event: ${eventType}`);
+    this.logger.log(`Event type: ${eventType}`);
 
     void this.processGithubEvent(eventType, payload).catch((error: unknown) => {
       const message =
-        error instanceof Error ? error.message : 'Unknown webhook processing error';
+        error instanceof Error
+          ? error.message
+          : 'Unknown webhook processing error';
 
       this.logger.error(`Webhook background processing failed: ${message}`);
+      if (error instanceof Error && error.stack) {
+        this.logger.error(error.stack);
+      }
     });
   }
 
@@ -72,14 +79,19 @@ export class WebhookService {
     }
 
     if (!rawBody?.length) {
-      throw new BadRequestException('Missing raw request body for verification.');
+      throw new BadRequestException(
+        'Missing raw request body for verification.',
+      );
     }
 
-    const webhookSecret =
-      this.configService.get<string>('GITHUB_WEBHOOK_SECRET');
+    const webhookSecret = this.configService.get<string>(
+      'GITHUB_WEBHOOK_SECRET',
+    );
 
     if (!webhookSecret) {
-      throw new UnauthorizedException('GitHub webhook secret is not configured.');
+      throw new UnauthorizedException(
+        'GitHub webhook secret is not configured.',
+      );
     }
 
     const expectedSignature = `sha256=${createHmac('sha256', webhookSecret)
@@ -110,8 +122,12 @@ export class WebhookService {
     await this.handlePullRequestEvent(payload);
   }
 
-  private async handlePullRequestEvent(payload: GithubWebhookDto): Promise<void> {
+  private async handlePullRequestEvent(
+    payload: GithubWebhookDto,
+  ): Promise<void> {
     const { action, repository, pull_request: pullRequest } = payload;
+
+    this.logger.log(`PR action: ${action ?? 'unknown'}`);
 
     if (action !== 'opened' && action !== 'synchronize') {
       this.logger.debug(`Ignoring pull_request action: ${action}`);
@@ -133,13 +149,20 @@ export class WebhookService {
     const repoName = repository.name;
     const prNumber = pullRequest.number;
 
-    this.logger.log(`[Webhook] PR #${pullRequest.number} ${action} in ${repository.full_name}`);
+    this.logger.log(
+      `[Webhook] PR #${pullRequest.number} ${action} in ${repository.full_name}`,
+    );
     this.logger.log(`Title: ${pullRequest.title}`);
     this.logger.log(`PR URL: ${pullRequest.html_url}`);
     this.logger.log(`Author: ${pullRequest.user.login}`);
     this.logger.log(`Repository: ${repository.name}`);
+    this.logger.log(
+      `Looking up connected repository for ${repository.full_name}`,
+    );
 
-    const connectedRepo = await this.reposService.findByFullName(repository.full_name);
+    const connectedRepo = await this.reposService.findByFullName(
+      repository.full_name,
+    );
 
     if (!connectedRepo) {
       this.logger.warn(
@@ -148,19 +171,35 @@ export class WebhookService {
       return;
     }
 
-    const connectedUser = await this.reposService.findUserByRepo(owner, repoName);
+    const connectedUser = await this.reposService.findUserByRepo(
+      owner,
+      repoName,
+    );
 
     if (!connectedUser) {
-      this.logger.warn(`No connected user found for repository: ${repository.full_name}`);
+      this.logger.warn(
+        `No connected user found for repository: ${repository.full_name}`,
+      );
       return;
     }
 
+    this.logger.log(
+      `Connected repository and user resolved for ${repository.full_name}`,
+    );
+    this.logger.log(
+      `Fetching PR files for ${repository.full_name}#${prNumber}`,
+    );
     const changedFiles = await this.githubService.getPRFiles(
       connectedUser.accessToken,
       owner,
       repoName,
       prNumber,
     );
+    this.logger.log(
+      `Fetched ${changedFiles.length} changed files for ${repository.full_name}#${prNumber}`,
+    );
+
+    this.logger.log(`Fetching PR diff for ${repository.full_name}#${prNumber}`);
     const diff = await this.githubService.getPRDiff(
       connectedUser.accessToken,
       owner,
@@ -174,7 +213,9 @@ export class WebhookService {
       this.logChangedFilePreview(file);
     }
 
-    this.logger.log(`[Webhook] Full diff length for PR #${prNumber}: ${diff.length} characters`);
+    this.logger.log(
+      `[Webhook] Full diff length for PR #${prNumber}: ${diff.length} characters`,
+    );
 
     const analysisInput: PRAnalysisInput = {
       repoName: repository.full_name,
@@ -191,18 +232,31 @@ export class WebhookService {
       fullDiff: diff,
     };
 
+    this.logger.log(`Running analysis for ${repository.full_name}#${prNumber}`);
     const riskReport = await this.analysisService.analyzePR(analysisInput);
+    this.logger.log(
+      `Analysis completed for ${repository.full_name}#${prNumber}`,
+    );
 
     this.logRiskReport(repository.full_name, prNumber, riskReport);
 
     const comment = this.buildRiskReportComment(riskReport);
+    this.logger.log(
+      `Generated markdown comment for ${repository.full_name}#${prNumber}`,
+    );
 
+    this.logger.log(
+      `Posting GitHub comment to ${owner}/${repoName} PR #${prNumber}`,
+    );
     await this.githubService.postPRComment(
       connectedUser.accessToken,
       owner,
       repoName,
       prNumber,
       comment,
+    );
+    this.logger.log(
+      `GitHub comment posted successfully to ${owner}/${repoName} PR #${prNumber}`,
     );
 
     await this.saveAnalysisRecord(
@@ -343,7 +397,8 @@ export class WebhookService {
 
   private compactSummary(summary: string): string {
     const normalized = summary.replace(/\s+/g, ' ').trim();
-    const firstSentence = normalized.match(/[^.!?]+[.!?]?/)?.[0]?.trim() ?? normalized;
+    const firstSentence =
+      normalized.match(/[^.!?]+[.!?]?/)?.[0]?.trim() ?? normalized;
 
     return this.compactLine(firstSentence, 160);
   }
@@ -381,7 +436,9 @@ export class WebhookService {
     const [owner] = fullName.split('/');
 
     if (!owner) {
-      throw new BadRequestException(`Invalid repository full name: ${fullName}`);
+      throw new BadRequestException(
+        `Invalid repository full name: ${fullName}`,
+      );
     }
 
     return owner;

@@ -19,13 +19,13 @@ export class WebhookController {
 
   @Post('github')
   @HttpCode(HttpStatus.OK)
-  async handleGithubWebhook(
+  handleGithubWebhook(
     @Req() req: RawBodyRequest<Request>,
     @Body() payload: GithubWebhookDto,
     @Headers('x-hub-signature-256') signatureHeader?: string,
     @Headers('x-github-event') eventType?: string,
-  ): Promise<{ received: boolean }> {
-    await this.webhookService.handleGithubWebhook(
+  ): { received: boolean } {
+    this.webhookService.handleGithubWebhook(
       req.rawBody,
       signatureHeader,
       eventType,
