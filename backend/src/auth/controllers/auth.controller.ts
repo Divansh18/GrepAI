@@ -38,8 +38,6 @@ export class AuthController {
     const user = await this.authService.validateOrCreateUser(req.user);
     const accessToken = await this.authService.generateJwt(user);
 
-    res.redirect(
-      `http://localhost:3000/auth/callback?token=${accessToken}`
-    );
+    res.redirect(`http://localhost:3000/auth/callback?token=${accessToken}`);
   }
 }

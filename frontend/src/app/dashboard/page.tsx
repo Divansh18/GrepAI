@@ -3,85 +3,29 @@
 import { useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 
-import { AppNavbar } from "../../components/AppNavbar";
-import { ArchitectureBackdrop } from "../../components/ArchitectureBackdrop";
-import { ConsoleLoadingState } from "../../components/ConsoleLoadingState";
-import { GithubMark } from "../../components/GithubMark";
-
-const API_BASE_URL = "http://localhost:3001";
-const TOKEN_STORAGE_KEY = "grepai_token";
-
-type RiskLevel = "HIGH" | "MEDIUM" | "LOW";
-
-type Repo = {
-  id: number;
-  owner: string;
-  name: string;
-  fullName: string;
-  webhookId: string | null;
-  isActive: boolean;
-  createdAt: string;
-  updatedAt: string;
-};
-
-type RecentAnalysis = {
-  id: number;
-  prNumber: number;
-  prTitle: string;
-  riskLevel: RiskLevel;
-  confidence: number;
-  summary: string;
-  createdAt: string;
-  repo: {
-    id?: number;
-    fullName: string;
-  };
-};
+import { APP_ROUTES } from "../../constants/routes";
+import {
+  ApiRequestError,
+  fetchConnectedRepos,
+  fetchRecentAnalyses,
+} from "../../lib/api";
+import {
+  clearStoredToken,
+  decodeUsernameFromToken,
+  getStoredToken,
+} from "../../lib/auth";
+import { AppNavbar } from "../../components/layout/AppNavbar";
+import { ArchitectureBackdrop } from "../../components/shared/ArchitectureBackdrop";
+import { ConsoleLoadingState } from "../../components/shared/ConsoleLoadingState";
+import { GithubMark } from "../../components/shared/GithubMark";
+import type { RecentAnalysis, RiskLevel } from "../../types/analysis";
+import type { Repo, RepoInsight } from "../../types/repo";
 
 type ActivityItem = {
   time: string;
   label: string;
   detail: string;
 };
-
-class ApiRequestError extends Error {
-  status: number;
-
-  constructor(message: string, status: number) {
-    super(message);
-    this.name = "ApiRequestError";
-    this.status = status;
-  }
-}
-
-type RepoInsight = Repo & {
-  latestAnalysis?: RecentAnalysis;
-  analysisCount: number;
-  affectedModules: string[];
-};
-
-function decodeUsernameFromToken(token: string): string {
-  try {
-    const payload = token.split(".")[1];
-
-    if (!payload) {
-      return "Engineer";
-    }
-
-    const normalizedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
-    const paddedPayload = normalizedPayload.padEnd(
-      normalizedPayload.length + ((4 - (normalizedPayload.length % 4)) % 4),
-      "=",
-    );
-    const parsed = JSON.parse(atob(paddedPayload)) as { username?: unknown };
-
-    return typeof parsed.username === "string" && parsed.username.trim().length > 0
-      ? parsed.username
-      : "Engineer";
-  } catch {
-    return "Engineer";
-  }
-}
 
 function formatRelativeTime(dateString: string): string {
   const timestamp = new Date(dateString).getTime();
@@ -137,42 +81,6 @@ function formatActivityTime(dateString: string): string {
     minute: "2-digit",
     hour12: false,
   });
-}
-
-async function fetchJson<T>(url: string, token: string): Promise<T> {
-  const response = await fetch(url, {
-    headers: {
-      Authorization: `Bearer ${token}`,
-    },
-    cache: "no-store",
-  });
-
-  const rawBody = await response.text();
-  let parsedBody: unknown = null;
-
-  if (rawBody) {
-    try {
-      parsedBody = JSON.parse(rawBody) as unknown;
-    } catch {
-      throw new ApiRequestError("Invalid JSON response from server.", response.status);
-    }
-  }
-
-  if (!response.ok) {
-    const message =
-      parsedBody &&
-      typeof parsedBody === "object" &&
-      "message" in parsedBody &&
-      typeof parsedBody.message === "string"
-        ? parsedBody.message
-        : response.status === 401
-          ? "Unauthorized request."
-          : `Request failed with status ${response.status}.`;
-
-    throw new ApiRequestError(message, response.status);
-  }
-
-  return parsedBody as T;
 }
 
 function riskText(risk: RiskLevel): string {
@@ -327,10 +235,10 @@ export default function DashboardPage() {
   };
 
   useEffect(() => {
-    const token = window.localStorage.getItem(TOKEN_STORAGE_KEY);
+    const token = getStoredToken();
 
     if (!token) {
-      router.replace("/");
+      router.replace(APP_ROUTES.home);
       return;
     }
 
@@ -344,18 +252,18 @@ export default function DashboardPage() {
       return;
     }
 
-    const token = window.localStorage.getItem(TOKEN_STORAGE_KEY);
+    const token = getStoredToken();
 
     if (!token) {
-      router.replace("/");
+      router.replace(APP_ROUTES.home);
       return;
     }
 
     let isCancelled = false;
 
     const handleUnauthorized = () => {
-      window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-      router.replace("/");
+      clearStoredToken();
+      router.replace(APP_ROUTES.home);
     };
 
     const loadDashboardData = async () => {
@@ -363,8 +271,8 @@ export default function DashboardPage() {
       setErrorMessage("");
 
       const [reposResult, analysesResult] = await Promise.allSettled([
-        fetchJson<Repo[]>(`${API_BASE_URL}/repos`, token),
-        fetchJson<RecentAnalysis[]>(`${API_BASE_URL}/analysis/recent`, token),
+        fetchConnectedRepos(token),
+        fetchRecentAnalyses(token),
       ]);
 
       if (isCancelled) {
@@ -461,8 +369,8 @@ export default function DashboardPage() {
         ].slice(0, 6);
 
   const handleLogout = () => {
-    window.localStorage.removeItem(TOKEN_STORAGE_KEY);
-    router.replace("/");
+    clearStoredToken();
+    router.replace(APP_ROUTES.home);
   };
 
   if (isCheckingAuth) {
@@ -485,7 +393,7 @@ export default function DashboardPage() {
               </h1>
               <button
                 type="button"
-                onClick={() => router.push("/connect")}
+                onClick={() => router.push(APP_ROUTES.connect)}
                 className="mt-5 inline-flex h-12 w-full max-w-[260px] items-center justify-center gap-3 border border-white/22 bg-white/5 px-5 text-[11px] font-extrabold uppercase tracking-[0.16em] text-[#F5F5F2] transition-colors duration-150 hover:border-white/38 hover:bg-white/[0.08]"
               >
                 <GithubMark className="h-4 w-4 fill-current" />
@@ -762,7 +670,7 @@ export default function DashboardPage() {
               </p>
               <button
                 type="button"
-                onClick={() => router.push("/connect")}
+                onClick={() => router.push(APP_ROUTES.connect)}
                 className="mt-5 inline-flex h-12 items-center justify-center gap-3 border border-white/22 bg-white/5 px-5 text-[11px] font-bold uppercase tracking-[0.16em] text-[#F5F5F2] transition-colors duration-150 hover:border-white/32 hover:bg-white/[0.08]"
               >
                 <GithubMark className="h-4 w-4 fill-current" />

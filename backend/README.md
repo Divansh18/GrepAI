@@ -1,98 +1,322 @@
-<p align="center">
-  <a href="http://nestjs.com/" target="blank"><img src="https://nestjs.com/img/logo-small.svg" width="120" alt="Nest Logo" /></a>
-</p>
+# GrepAI Backend
 
-[circleci-image]: https://img.shields.io/circleci/build/github/nestjs/nest/master?token=abc123def456
-[circleci-url]: https://circleci.com/gh/nestjs/nest
+The GrepAI backend is a NestJS service that powers GitHub-native repository onboarding, webhook processing, AI risk analysis, PR comment generation, and dashboard data access.
 
-  <p align="center">A progressive <a href="http://nodejs.org" target="_blank">Node.js</a> framework for building efficient and scalable server-side applications.</p>
-    <p align="center">
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/v/@nestjs/core.svg" alt="NPM Version" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/l/@nestjs/core.svg" alt="Package License" /></a>
-<a href="https://www.npmjs.com/~nestjscore" target="_blank"><img src="https://img.shields.io/npm/dm/@nestjs/common.svg" alt="NPM Downloads" /></a>
-<a href="https://circleci.com/gh/nestjs/nest" target="_blank"><img src="https://img.shields.io/circleci/build/github/nestjs/nest/master" alt="CircleCI" /></a>
-<a href="https://discord.gg/G7Qnnhy" target="_blank"><img src="https://img.shields.io/badge/discord-online-brightgreen.svg" alt="Discord"/></a>
-<a href="https://opencollective.com/nest#backer" target="_blank"><img src="https://opencollective.com/nest/backers/badge.svg" alt="Backers on Open Collective" /></a>
-<a href="https://opencollective.com/nest#sponsor" target="_blank"><img src="https://opencollective.com/nest/sponsors/badge.svg" alt="Sponsors on Open Collective" /></a>
-  <a href="https://paypal.me/kamilmysliwiec" target="_blank"><img src="https://img.shields.io/badge/Donate-PayPal-ff3f59.svg" alt="Donate us"/></a>
-    <a href="https://opencollective.com/nest#sponsor"  target="_blank"><img src="https://img.shields.io/badge/Support%20us-Open%20Collective-41B883.svg" alt="Support us"></a>
-  <a href="https://twitter.com/nestframework" target="_blank"><img src="https://img.shields.io/twitter/follow/nestframework.svg?style=social&label=Follow" alt="Follow us on Twitter"></a>
-</p>
-  <!--[![Backers on Open Collective](https://opencollective.com/nest/backers/badge.svg)](https://opencollective.com/nest#backer)
-  [![Sponsors on Open Collective](https://opencollective.com/nest/sponsors/badge.svg)](https://opencollective.com/nest#sponsor)-->
+This service is designed around a simple operational promise:
 
-## Description
+> when a pull request changes architecture boundaries, shared runtime paths, or downstream behavior, GrepAI should catch it before merge and post a concise technical review directly into GitHub.
 
-[Nest](https://github.com/nestjs/nest) framework TypeScript starter repository.
+## Stack
 
-## Project setup
+- NestJS 11
+- TypeScript
+- TypeORM
+- MySQL
+- Passport GitHub OAuth
+- JWT authentication
+- Octokit
+- GitHub Webhooks
+- Anthropic Claude API
 
-```bash
-$ npm install
+## Backend Responsibilities
+
+- authenticate users with GitHub
+- store user session/JWT context
+- fetch the authenticated user’s repositories from GitHub
+- connect repositories and register webhooks
+- receive pull request webhook events
+- fetch PR files and context from GitHub
+- run AI analysis
+- render premium, compact PR comments
+- persist analysis history for the dashboard
+
+## Module Architecture
+
+The backend now follows feature-based organization plus a dedicated database layer:
+
+```text
+backend/src/
+├── analysis/
+│   ├── controllers/
+│   ├── dto/
+│   ├── entities/
+│   ├── modules/
+│   └── services/
+├── auth/
+│   ├── controllers/
+│   ├── dto/
+│   ├── guards/
+│   ├── modules/
+│   ├── services/
+│   └── strategies/
+├── database/
+│   ├── config/
+│   └── modules/
+├── github/
+│   ├── modules/
+│   └── services/
+├── repos/
+│   ├── controllers/
+│   ├── dto/
+│   ├── entities/
+│   ├── modules/
+│   └── services/
+├── users/
+│   └── entities/
+└── webhook/
+    ├── controllers/
+    ├── dto/
+    ├── modules/
+    └── services/
 ```
 
-## Compile and run the project
+## Major Flows
 
-```bash
-# development
-$ npm run start
+### 1. GitHub OAuth
 
-# watch mode
-$ npm run start:dev
-
-# production mode
-$ npm run start:prod
+```text
+frontend CTA
+  -> /auth/github
+  -> GitHub OAuth consent
+  -> /auth/github/callback
+  -> JWT issued
+  -> frontend /auth/callback stores token
 ```
 
-## Run tests
+### 2. Repository Connection
 
-```bash
-# unit tests
-$ npm run test
-
-# e2e tests
-$ npm run test:e2e
-
-# test coverage
-$ npm run test:cov
+```text
+authenticated user
+  -> GET /repos/github-repos
+  -> choose repository
+  -> POST /repos/connect
+  -> verify repository exists on GitHub
+  -> save repo
+  -> create or reconcile webhook
 ```
 
-## Deployment
+### 3. PR Analysis Lifecycle
 
-When you're ready to deploy your NestJS application to production, there are some key steps you can take to ensure it runs as efficiently as possible. Check out the [deployment documentation](https://docs.nestjs.com/deployment) for more information.
-
-If you are looking for a cloud-based platform to deploy your NestJS application, check out [Mau](https://mau.nestjs.com), our official platform for deploying NestJS applications on AWS. Mau makes deployment straightforward and fast, requiring just a few simple steps:
-
-```bash
-$ npm install -g @nestjs/mau
-$ mau deploy
+```text
+GitHub pull_request webhook
+  -> webhook signature verified
+  -> repository + user resolved
+  -> PR files and patch fetched
+  -> Claude analysis executed
+  -> GitHub comment body rendered
+  -> issues.createComment()
+  -> analysis persisted to MySQL
 ```
 
-With Mau, you can deploy your application in just a few clicks, allowing you to focus on building features rather than managing infrastructure.
+## Database Architecture
 
-## Resources
+Database bootstrapping has been moved out of `app.module.ts` and into:
 
-Check out a few resources that may come in handy when working with NestJS:
+- [`src/database/config/typeorm.config.ts`](./src/database/config/typeorm.config.ts)
+- [`src/database/modules/database.module.ts`](./src/database/modules/database.module.ts)
 
-- Visit the [NestJS Documentation](https://docs.nestjs.com) to learn more about the framework.
-- For questions and support, please visit our [Discord channel](https://discord.gg/G7Qnnhy).
-- To dive deeper and get more hands-on experience, check out our official video [courses](https://courses.nestjs.com/).
-- Deploy your application to AWS with the help of [NestJS Mau](https://mau.nestjs.com) in just a few clicks.
-- Visualize your application graph and interact with the NestJS application in real-time using [NestJS Devtools](https://devtools.nestjs.com).
-- Need help with your project (part-time to full-time)? Check out our official [enterprise support](https://enterprise.nestjs.com).
-- To stay in the loop and get updates, follow us on [X](https://x.com/nestframework) and [LinkedIn](https://linkedin.com/company/nestjs).
-- Looking for a job, or have a job to offer? Check out our official [Jobs board](https://jobs.nestjs.com).
+Current behavior:
 
-## Support
+- MySQL connection
+- entities loaded through glob discovery
+- `synchronize: true` for now
 
-Nest is an MIT-licensed open source project. It can grow thanks to the sponsors and support by the amazing backers. If you'd like to join them, please [read more here](https://docs.nestjs.com/support).
+Environment variable names remain:
 
-## Stay in touch
+- `DATABASE_HOST`
+- `DATABASE_PORT`
+- `DATABASE_USER`
+- `DATABASE_PASS`
+- `DATABASE_NAME`
 
-- Author - [Kamil Myśliwiec](https://twitter.com/kammysliwiec)
-- Website - [https://nestjs.com](https://nestjs.com/)
-- Twitter - [@nestframework](https://twitter.com/nestframework)
+## Core Feature Areas
 
-## License
+### `auth`
 
-Nest is [MIT licensed](https://github.com/nestjs/nest/blob/master/LICENSE).
+- GitHub OAuth entry + callback
+- JWT issue/validation
+- protected API routes through `JwtAuthGuard`
+
+### `repos`
+
+- connected repository persistence
+- GitHub repository discovery for the authenticated user
+- webhook-aware repository connection flow
+
+### `github`
+
+- Octokit integration
+- repo existence checks
+- webhook creation/reconciliation
+- PR file fetches
+- PR comment posting
+
+### `analysis`
+
+- AI prompt construction
+- structured risk report parsing
+- recent analysis API
+
+### `webhook`
+
+- GitHub signature validation
+- pull request event handling
+- analysis orchestration
+- comment formatting + persistence
+
+## API Routes
+
+### Authentication
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/auth/github` | Begin GitHub OAuth |
+| `GET` | `/auth/github/callback` | OAuth callback and JWT issue |
+
+### Repositories
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/repos` | Connected repositories for the authenticated user |
+| `GET` | `/repos/github-repos` | Live repository list from GitHub |
+| `POST` | `/repos/connect` | Connect a repository and register a webhook |
+
+### Analysis
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `GET` | `/analysis/recent` | Latest dashboard-ready PR analyses |
+
+### Webhooks
+
+| Method | Route | Purpose |
+| --- | --- | --- |
+| `POST` | `/webhook/github` | GitHub webhook receiver |
+
+## Environment Variables
+
+Defined in [`./.env.example`](./.env.example):
+
+```env
+DATABASE_HOST=
+DATABASE_PORT=
+DATABASE_USER=
+DATABASE_PASS=
+DATABASE_NAME=
+PORT=3001
+
+GITHUB_CLIENT_ID=
+GITHUB_CLIENT_SECRET=
+GITHUB_CALLBACK_URL=http://localhost:3001/auth/github/callback
+WEBHOOK_URL=https://xxxxx.ngrok-free.app/webhook/github
+GITHUB_WEBHOOK_SECRET=grepai_webhook_secret_123
+JWT_SECRET=
+CLAUDE_API_KEY=
+CLAUDE_MODEL=claude-sonnet-4-20250514
+FRONTEND_BASE_URL=http://localhost:3000
+```
+
+## Local Setup
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start development mode:
+
+```bash
+npm run start:dev
+```
+
+Build:
+
+```bash
+npm run build
+```
+
+Start compiled app:
+
+```bash
+npm run start:prod
+```
+
+Lint:
+
+```bash
+npm run lint
+```
+
+## GitHub + ngrok Setup
+
+For local webhook development:
+
+1. Start the backend on port `3001`
+2. Expose it publicly:
+
+```bash
+ngrok http 3001
+```
+
+3. Set:
+
+```env
+WEBHOOK_URL=https://<your-ngrok-domain>/webhook/github
+```
+
+4. Reconnect the repository if the ngrok URL changes so webhook reconciliation can update the existing hook.
+
+## Comment Formatting Strategy
+
+Claude does not post directly to GitHub. Instead:
+
+1. analysis returns structured JSON
+2. backend normalizes the result
+3. webhook service formats the final GitHub comment
+
+This keeps GrepAI comments:
+
+- concise
+- consistent
+- architecture-aware
+- easy to scan in GitHub dark mode
+
+## Troubleshooting
+
+### `Repository not found on GitHub`
+
+The authenticated user’s GitHub token cannot access the target repository, or the repo name is invalid.
+
+### Webhook connected but PR comments not posting
+
+Check:
+
+- `WEBHOOK_URL` still matches the active ngrok domain
+- repository webhook exists on GitHub
+- pull request event delivery is succeeding
+- GitHub access token is still valid
+
+### `Cannot find module dist/main` in watch mode
+
+This was resolved by moving the TypeScript incremental build info into `dist` so Nest watch mode always re-emits after `dist` is cleared.
+
+### MySQL connection failures
+
+Verify:
+
+- MySQL is running
+- `DATABASE_*` values are correct
+- local sandbox or firewall is not blocking `3306`
+
+## Engineering Notes
+
+- webhook reliability is prioritized over strict coupling to auxiliary operations
+- repository connection should not hard-fail on temporary webhook creation issues
+- analysis persistence should not block GitHub webhook response reliability
+- logs should remain explicit at each stage of the PR analysis pipeline
+
+## Related Docs
+
+- Product overview: [`../README.md`](../README.md)
+- Frontend architecture: [`../frontend/README.md`](../frontend/README.md)

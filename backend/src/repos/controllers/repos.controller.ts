@@ -14,6 +14,7 @@ import type { JwtUserPayload } from '../../auth/strategies/jwt.strategy';
 import { ConnectRepoDto } from '../dto/connect-repo.dto';
 import { Repo } from '../entities/repo.entity';
 import { ReposService } from '../services/repos.service';
+import type { GithubUserRepo } from '../../github/services/github.service';
 
 type AuthenticatedRequest = Request & {
   user: JwtUserPayload;
@@ -27,6 +28,14 @@ export class ReposController {
   @UseGuards(JwtAuthGuard)
   async getUserRepos(@Req() req: AuthenticatedRequest): Promise<Repo[]> {
     return this.reposService.findUserRepos(req.user.userId);
+  }
+
+  @Get('github-repos')
+  @UseGuards(JwtAuthGuard)
+  async getAuthenticatedGithubRepos(
+    @Req() req: AuthenticatedRequest,
+  ): Promise<GithubUserRepo[]> {
+    return this.reposService.getUserGithubRepos(req.user.userId);
   }
 
   @Post('connect')

@@ -1,36 +1,203 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# GrepAI Frontend
 
-## Getting Started
+The GrepAI frontend is a Next.js application that presents the product as a dark, architecture-aware engineering tool rather than a generic SaaS dashboard. It covers four core surfaces:
 
-First, run the development server:
+- landing page
+- GitHub OAuth callback
+- repository connection flow
+- live merge intelligence dashboard
+
+## Frontend Philosophy
+
+The UI is intentionally opinionated:
+
+- black minimal interface
+- off-white primary typography
+- muted gray system metadata
+- sharp borders
+- restrained amber accents for proof and technical emphasis
+- no gradients
+- no glow
+- no rounded SaaS widgets
+
+The result should feel closer to an internal developer platform or observability tool than a consumer onboarding experience.
+
+## Stack
+
+- Next.js 16 App Router
+- React 19
+- TypeScript
+- Tailwind CSS
+
+## App Surfaces
+
+### `/`
+
+Product landing page with:
+
+- architecture-aware positioning
+- GitHub-native CTA
+- real PR output proof artifact
+- live system-style product framing
+
+### `/auth/callback`
+
+Receives the JWT token from the backend OAuth callback, stores it in local storage, and redirects to the dashboard.
+
+### `/connect`
+
+Repository onboarding flow with:
+
+- GitHub-native repository picker
+- webhook activation flow
+- command-palette style selection UX
+
+### `/dashboard`
+
+Operational intelligence console showing:
+
+- live merge intelligence state
+- compact risk stream
+- connected repositories
+- system activity feed
+
+## Folder Structure
+
+```text
+frontend/
+├── app/
+│   ├── auth/callback/
+│   ├── connect/
+│   ├── dashboard/
+│   ├── globals.css
+│   ├── layout.tsx
+│   └── page.tsx
+├── components/
+│   ├── layout/
+│   │   └── AppNavbar.tsx
+│   └── shared/
+│       ├── ArchitectureBackdrop.tsx
+│       ├── ConsoleLoadingState.tsx
+│       └── GithubMark.tsx
+├── constants/
+│   └── routes.ts
+├── lib/
+│   ├── api.ts
+│   └── auth.ts
+├── public/
+└── types/
+    ├── analysis.ts
+    └── repo.ts
+```
+
+## Design System Notes
+
+### Layout
+
+- App Router pages own only page-level state and composition
+- shared navbar and visual primitives live in `components/`
+- background atmosphere is centralized through `ArchitectureBackdrop`
+
+### State & Data
+
+- API helpers live in `lib/api.ts`
+- JWT token helpers live in `lib/auth.ts`
+- shared route constants live in `constants/routes.ts`
+- domain typing lives in `types/`
+
+### Visual Language
+
+- typography hierarchy is intentionally restrained
+- product proof is favored over decorative UI
+- interaction states use subtle hover and focus changes only
+
+## Local Development
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Start the development server:
 
 ```bash
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
+Build for production:
 
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
+```bash
+npm run build
+```
 
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
+Start the production server:
 
-## Learn More
+```bash
+npm run start
+```
 
-To learn more about Next.js, take a look at the following resources:
+Lint:
 
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
+```bash
+npm run lint
+```
 
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
+## API Integration
 
-## Deploy on Vercel
+The frontend talks to the NestJS backend at `http://localhost:3001` through route helpers in `constants/routes.ts`.
 
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
+Current integration points include:
 
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+- `GET /repos`
+- `GET /repos/github-repos`
+- `POST /repos/connect`
+- `GET /analysis/recent`
+- `GET /auth/github` via top-level CTA
+
+## Authentication Flow
+
+1. User clicks `Connect GitHub`
+2. Backend GitHub OAuth flow completes
+3. Backend redirects to `/auth/callback?token=...`
+4. Frontend stores `grepai_token`
+5. Authenticated routes fetch data with `Authorization: Bearer <token>`
+
+Token helpers live in:
+
+- [`lib/auth.ts`](./lib/auth.ts)
+
+## Deployment Notes
+
+Before deployment, review hardcoded local backend URLs in:
+
+- [`constants/routes.ts`](./constants/routes.ts)
+
+Recommended future production hardening:
+
+- move API origin to `NEXT_PUBLIC_API_BASE_URL`
+- add environment-aware route helpers
+- configure CSP and image domains if external assets are introduced
+
+## Screens & Assets
+
+Relevant local assets:
+
+- [`public/grepai-logo.png`](./public/grepai-logo.png)
+- [`public/github-pr-proof.png`](./public/github-pr-proof.png)
+- [`public/architecture-bg.png`](./public/architecture-bg.png)
+
+## UI Quality Checklist
+
+Before shipping UI changes:
+
+- no horizontal overflow on mobile
+- auth redirects still work
+- dashboard data fetches still resolve
+- connect flow still submits selected repositories correctly
+- all buttons preserve the GrepAI design language
+
+## Related Docs
+
+- Root product overview: [`../README.md`](../README.md)
+- Backend service documentation: [`../backend/README.md`](../backend/README.md)

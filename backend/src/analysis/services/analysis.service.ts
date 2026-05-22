@@ -8,11 +8,7 @@ import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { Repository } from 'typeorm';
 
-import {
-  PRAnalysisInput,
-  RiskLevel,
-  RiskReport,
-} from '../dto/risk-report.dto';
+import { PRAnalysisInput, RiskLevel, RiskReport } from '../dto/risk-report.dto';
 import { RecentAnalysisResponseDto } from '../dto/recent-analysis-response.dto';
 import { PrAnalysis } from '../entities/analysis.entity';
 
@@ -43,7 +39,9 @@ export class AnalysisService {
     try {
       const anthropic = new Anthropic({ apiKey });
       const response = await anthropic.messages.create({
-        model: this.configService.get<string>('CLAUDE_MODEL') ?? 'claude-sonnet-4-5-20250929',
+        model:
+          this.configService.get<string>('CLAUDE_MODEL') ??
+          'claude-sonnet-4-5-20250929',
         max_tokens: 1000,
         system: this.buildSystemPrompt(),
         messages: [
@@ -58,7 +56,9 @@ export class AnalysisService {
 
       if (!rawResponseText.trim()) {
         this.logger.error('Claude returned an empty analysis response.');
-        return this.buildFallbackReport('Claude returned an empty analysis response.');
+        return this.buildFallbackReport(
+          'Claude returned an empty analysis response.',
+        );
       }
 
       return this.parseRiskReport(rawResponseText);
@@ -72,7 +72,9 @@ export class AnalysisService {
     }
   }
 
-  async getRecentAnalyses(userId: number): Promise<RecentAnalysisResponseDto[]> {
+  async getRecentAnalyses(
+    userId: number,
+  ): Promise<RecentAnalysisResponseDto[]> {
     this.logger.log(`Fetching recent analyses for user ${userId}`);
 
     try {
@@ -121,7 +123,9 @@ export class AnalysisService {
         }`,
       );
 
-      throw new InternalServerErrorException('Unable to fetch recent analyses.');
+      throw new InternalServerErrorException(
+        'Unable to fetch recent analyses.',
+      );
     }
   }
 
@@ -264,7 +268,9 @@ export class AnalysisService {
     }
 
     return value
-      .map((finding) => this.truncateText(this.normalizeString(finding, ''), 160))
+      .map((finding) =>
+        this.truncateText(this.normalizeString(finding, ''), 160),
+      )
       .filter((finding) => finding.length > 0)
       .slice(0, 3);
   }
@@ -288,7 +294,9 @@ export class AnalysisService {
   }
 
   private truncateText(value: string, maxLength: number): string {
-    return value.length <= maxLength ? value : `${value.slice(0, maxLength - 1).trimEnd()}…`;
+    return value.length <= maxLength
+      ? value
+      : `${value.slice(0, maxLength - 1).trimEnd()}…`;
   }
 
   private limitSentences(value: string, maxSentences: number): string {
@@ -322,7 +330,9 @@ export class AnalysisService {
       return analysis.summary.trim();
     }
 
-    const parsedFindingSummary = this.extractSummaryFromFindings(analysis.findings);
+    const parsedFindingSummary = this.extractSummaryFromFindings(
+      analysis.findings,
+    );
 
     if (parsedFindingSummary) {
       return parsedFindingSummary;

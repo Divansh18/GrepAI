@@ -3,9 +3,9 @@
 import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
-import { ConsoleLoadingState } from "../../../components/ConsoleLoadingState";
-
-const TOKEN_STORAGE_KEY = "grepai_token";
+import { APP_ROUTES } from "../../../constants/routes";
+import { storeToken } from "../../../lib/auth";
+import { ConsoleLoadingState } from "../../../components/shared/ConsoleLoadingState";
 
 function AuthCallbackContent() {
   const router = useRouter();
@@ -15,15 +15,15 @@ function AuthCallbackContent() {
     const token = searchParams.get("token");
 
     if (!token || token.trim().length === 0) {
-      router.replace("/");
+      router.replace(APP_ROUTES.home);
       return;
     }
 
     try {
-      localStorage.setItem(TOKEN_STORAGE_KEY, token);
-      router.replace("/dashboard");
+      storeToken(token);
+      router.replace(APP_ROUTES.dashboard);
     } catch {
-      router.replace("/");
+      router.replace(APP_ROUTES.home);
     }
   }, [router, searchParams]);
 
