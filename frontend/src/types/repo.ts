@@ -1,0 +1,37 @@
+import type { RecentAnalysis } from "./analysis";
+
+export type Repo = {
+  id: number;
+  owner: string;
+  name: string;
+  fullName: string;
+  webhookId: string | null;
+  isActive: boolean;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type GithubRepository = {
+  owner: string;
+  name: string;
+  fullName: string;
+  private: boolean;
+  description: string | null;
+};
+
+export type ConnectResponse = {
+  id: number;
+  owner: string;
+  name: string;
+  fullName: string;
+  isActive: boolean;
+  webhookId: string | null;
+  createdAt: string;
+  updatedAt: string;
+};
+
+export type RepoInsight = Repo & {
+  latestAnalysis?: RecentAnalysis;
+  analysisCount: number;
+  affectedModules: string[];
+};

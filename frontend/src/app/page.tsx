@@ -1,7 +1,8 @@
 import Image from "next/image";
 
-import { AppNavbar } from "../components/AppNavbar";
-import { GithubMark } from "../components/GithubMark";
+import { EXTERNAL_ROUTES } from "../constants/routes";
+import { AppNavbar } from "../components/layout/AppNavbar";
+import { GithubMark } from "../components/shared/GithubMark";
 
 const navLinks = [
   { label: "How it works", href: "#how-it-works" },
@@ -199,7 +200,7 @@ export default function HomePage() {
         navLinks={[...navLinks]}
         action={{
           label: "Connect GitHub",
-          href: "http://localhost:3001/auth/github",
+          href: EXTERNAL_ROUTES.githubAuth,
           icon: "github",
         }}
       />
@@ -246,7 +247,7 @@ export default function HomePage() {
 
                 <div className="mt-7 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
                   <a
-                    href="http://localhost:3001/auth/github"
+                    href={EXTERNAL_ROUTES.githubAuth}
                     aria-label="Connect GitHub to GrepAI"
                     className="inline-flex h-12 items-center justify-center gap-3 border border-white/20 bg-white/5 px-5 text-[11px] font-bold uppercase tracking-[0.13em] text-white transition-colors duration-200 hover:border-white/42 hover:bg-white/[0.08]"
                   >

@@ -1,7 +1,7 @@
 import Image from "next/image";
 import Link from "next/link";
 
-import { GithubMark } from "./GithubMark";
+import { GithubMark } from "../shared/GithubMark";
 
 type NavLink = {
   label: string;
