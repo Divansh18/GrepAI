@@ -220,8 +220,10 @@ export class ReposService {
     );
 
     if (!webhookId) {
-      this.logger.warn(`Failed to create webhook for ${repo.fullName}`);
-      return;
+      this.logger.error(`Failed to activate webhook for ${repo.fullName}`);
+      throw new BadRequestException(
+        'GitHub webhook activation failed. Reconnect GitHub and verify repository webhook permissions.',
+      );
     }
 
     repo.webhookId = webhookId;

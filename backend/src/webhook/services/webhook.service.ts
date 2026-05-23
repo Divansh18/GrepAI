@@ -7,7 +7,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { InjectRepository } from '@nestjs/typeorm';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { Repository } from 'typeorm';
+import { MoreThanOrEqual, Repository } from 'typeorm';
 
 import type {
   PRAnalysisInput,
@@ -27,6 +27,8 @@ import { ReposService } from '../../repos/services/repos.service';
 @Injectable()
 export class WebhookService {
   private readonly logger = new Logger(WebhookService.name);
+  private static readonly LIMIT_REACHED_COMMENT_TITLE =
+    '## 🤖 GrepAI — Free Tier Limit Reached';
 
   constructor(
     private readonly configService: ConfigService,
@@ -186,6 +188,21 @@ export class WebhookService {
     this.logger.log(
       `Connected repository and user resolved for ${repository.full_name}`,
     );
+
+    const shouldContinue = await this.enforceMonthlyUsageLimitIfNeeded({
+      accessToken: connectedUser.accessToken,
+      githubUsername: connectedUser.username,
+      userId: connectedUser.id,
+      owner,
+      repoName,
+      repoFullName: repository.full_name,
+      prNumber,
+    });
+
+    if (!shouldContinue) {
+      return;
+    }
+
     this.logger.log(
       `Fetching PR files for ${repository.full_name}#${prNumber}`,
     );
@@ -430,6 +447,166 @@ export class WebhookService {
 
   private getGrepAiLogoUrl(): string {
     return 'https://raw.githubusercontent.com/Divansh18/GrepAI/main/frontend/public/grepai-logo.png';
+  }
+
+  private async enforceMonthlyUsageLimitIfNeeded(params: {
+    accessToken: string;
+    githubUsername: string;
+    userId: number;
+    owner: string;
+    repoName: string;
+    repoFullName: string;
+    prNumber: number;
+  }): Promise<boolean> {
+    if (!this.isUsageLimitEnforced(params.githubUsername)) {
+      return true;
+    }
+
+    const limit = this.getFreeTierMonthlyLimit();
+    const currentMonthStart = this.getCurrentMonthStart();
+    const nextResetDate = this.getNextMonthStart();
+    const nextResetDateLabel = this.formatResetDate(nextResetDate);
+    const usageCount = await this.analysisRepository.count({
+      where: {
+        createdAt: MoreThanOrEqual(currentMonthStart),
+        repo: {
+          user: {
+            id: params.userId,
+          },
+        },
+      },
+    });
+
+    if (usageCount < limit) {
+      return true;
+    }
+
+    this.logger.warn(
+      `Monthly limit reached | userId=${params.userId} githubUsername=${params.githubUsername} repository=${params.repoFullName} prNumber=${params.prNumber} currentUsage=${usageCount} limit=${limit} nextResetDate=${nextResetDateLabel}`,
+    );
+
+    const alreadyPosted = await this.hasExistingLimitReachedComment(
+      params.accessToken,
+      params.owner,
+      params.repoName,
+      params.prNumber,
+    );
+
+    if (!alreadyPosted) {
+      this.logger.log(
+        `Posting free-tier limit comment to ${params.owner}/${params.repoName} PR #${params.prNumber}`,
+      );
+      await this.githubService.postPRComment(
+        params.accessToken,
+        params.owner,
+        params.repoName,
+        params.prNumber,
+        this.buildLimitReachedComment(nextResetDateLabel),
+      );
+    }
+
+    return false;
+  }
+
+  private isUsageLimitEnforced(githubUsername: string): boolean {
+    const enforcementEnabled = this.parseBooleanConfigValue(
+      this.configService.get<string>('USAGE_LIMIT_ENFORCEMENT'),
+      true,
+    );
+
+    if (!enforcementEnabled) {
+      return false;
+    }
+
+    const nodeEnv = this.configService.get<string>('NODE_ENV') ?? 'development';
+
+    if (nodeEnv === 'production') {
+      return true;
+    }
+
+    const bypassUsers = (
+      this.configService.get<string>('USAGE_LIMIT_BYPASS_GITHUB_USERS') ?? ''
+    )
+      .split(',')
+      .map((user) => user.trim().toLowerCase())
+      .filter(Boolean);
+
+    return !bypassUsers.includes(githubUsername.trim().toLowerCase());
+  }
+
+  private getFreeTierMonthlyLimit(): number {
+    return this.configService.get<number>('FREE_TIER_MONTHLY_LIMIT', 50);
+  }
+
+  private parseBooleanConfigValue(
+    value: string | undefined,
+    fallback: boolean,
+  ): boolean {
+    if (typeof value !== 'string') {
+      return fallback;
+    }
+
+    const normalized = value.trim().toLowerCase();
+
+    if (['true', '1', 'yes', 'on'].includes(normalized)) {
+      return true;
+    }
+
+    if (['false', '0', 'no', 'off'].includes(normalized)) {
+      return false;
+    }
+
+    return fallback;
+  }
+
+  private getCurrentMonthStart(): Date {
+    const now = new Date();
+
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  }
+
+  private getNextMonthStart(): Date {
+    const now = new Date();
+
+    return new Date(now.getFullYear(), now.getMonth() + 1, 1);
+  }
+
+  private formatResetDate(date: Date): string {
+    return new Intl.DateTimeFormat('en-US', {
+      month: 'long',
+      day: 'numeric',
+      year: 'numeric',
+    }).format(date);
+  }
+
+  private async hasExistingLimitReachedComment(
+    accessToken: string,
+    owner: string,
+    repo: string,
+    prNumber: number,
+  ): Promise<boolean> {
+    const comments = await this.githubService.getPRComments(
+      accessToken,
+      owner,
+      repo,
+      prNumber,
+    );
+
+    return comments.some((comment) =>
+      (comment.body ?? '').includes(WebhookService.LIMIT_REACHED_COMMENT_TITLE),
+    );
+  }
+
+  private buildLimitReachedComment(nextResetDate: string): string {
+    return [
+      WebhookService.LIMIT_REACHED_COMMENT_TITLE,
+      '',
+      'You have used all free PR analyses available for this month.',
+      '',
+      `Your free-tier limit resets on ${nextResetDate}.`,
+      '',
+      'Upgrade to GrepAI Pro for unlimited repository intelligence and architecture-aware risk analysis.',
+    ].join('\n');
   }
 
   private extractOwnerFromFullName(fullName: string): string {

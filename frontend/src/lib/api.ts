@@ -25,12 +25,20 @@ async function parseJsonResponse<T>(response: Response): Promise<T> {
   }
 
   if (!response.ok) {
-    const message =
+    const extractedMessage =
       parsedBody &&
       typeof parsedBody === "object" &&
-      "message" in parsedBody &&
-      typeof parsedBody.message === "string"
-        ? parsedBody.message
+      "message" in parsedBody
+        ? Array.isArray(parsedBody.message)
+          ? parsedBody.message.join(", ")
+          : typeof parsedBody.message === "string"
+            ? parsedBody.message
+            : null
+        : null;
+
+    const message =
+      extractedMessage
+        ? extractedMessage
         : response.status === 401
           ? "Unauthorized request."
           : `Request failed with status ${response.status}.`;

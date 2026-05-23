@@ -28,6 +28,12 @@ export interface GithubUserRepo {
   description: string | null;
 }
 
+export interface GithubIssueComment {
+  id: number;
+  body: string | null;
+  userLogin: string | null;
+}
+
 type GithubApiErrorShape = {
   status?: number;
   message?: string;
@@ -126,6 +132,37 @@ export class GithubService {
       this.handleGithubApiError(
         error,
         `post PR comment for ${owner}/${repo}#${prNumber}`,
+      );
+    }
+  }
+
+  async getPRComments(
+    accessToken: string,
+    owner: string,
+    repo: string,
+    prNumber: number,
+  ): Promise<GithubIssueComment[]> {
+    try {
+      const octokit = await this.createClient(accessToken);
+      const comments = await octokit.paginate(
+        octokit.rest.issues.listComments,
+        {
+          owner,
+          repo,
+          issue_number: prNumber,
+          per_page: 100,
+        },
+      );
+
+      return comments.map((comment) => ({
+        id: comment.id,
+        body: comment.body ?? null,
+        userLogin: comment.user?.login ?? null,
+      }));
+    } catch (error) {
+      this.handleGithubApiError(
+        error,
+        `fetch PR comments for ${owner}/${repo}#${prNumber}`,
       );
     }
   }
