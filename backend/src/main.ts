@@ -18,8 +18,11 @@ async function bootstrap() {
   });
 
   const configService = app.get(ConfigService);
-  const frontendUrl =
-    configService.get<string>('FRONTEND_URL') ?? 'http://localhost:3000';
+  const configuredFrontendUrl = configService.get<string>('FRONTEND_URL');
+  if (isProduction && !configuredFrontendUrl) {
+    throw new Error('FRONTEND_URL must be set in production.');
+  }
+  const frontendUrl = configuredFrontendUrl ?? 'http://localhost:3000';
   const port = configService.get<number>('PORT', 3001);
 
   app.use(helmet());
