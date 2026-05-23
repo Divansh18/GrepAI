@@ -221,21 +221,34 @@ export class AnalysisService {
   }
 
   private sanitizeJsonResponse(rawResponseText: string): string {
-    const trimmed = rawResponseText.trim();
-    const withoutCodeFence = trimmed
-      .replace(/^```json\s*/i, '')
-      .replace(/^```\s*/i, '')
-      .replace(/\s*```$/i, '');
+  const trimmed = rawResponseText.trim();
 
-    const firstBraceIndex = withoutCodeFence.indexOf('{');
-    const lastBraceIndex = withoutCodeFence.lastIndexOf('}');
+  const withoutCodeFence = trimmed
+    .replace(/^```json\s*/i, '')
+    .replace(/^```\s*/i, '')
+    .replace(/\s*```$/i, '');
 
-    if (firstBraceIndex === -1 || lastBraceIndex === -1) {
-      return withoutCodeFence;
-    }
+  const firstBraceIndex = withoutCodeFence.indexOf('{');
+  const lastBraceIndex = withoutCodeFence.lastIndexOf('}');
 
-    return withoutCodeFence.slice(firstBraceIndex, lastBraceIndex + 1);
+  if (firstBraceIndex === -1 || lastBraceIndex === -1) {
+    throw new Error('No valid JSON object found in Claude response');
   }
+
+  let jsonCandidate = withoutCodeFence.slice(
+    firstBraceIndex,
+    lastBraceIndex + 1,
+  );
+
+  jsonCandidate = jsonCandidate
+    .replace(/[\u0000-\u001F]+/g, ' ')
+    .replace(/\n/g, ' ')
+    .replace(/\r/g, ' ')
+    .replace(/\t/g, ' ')
+    .trim();
+
+  return jsonCandidate;
+}
 
   private normalizeRiskLevel(value: unknown): RiskLevel {
     return value === 'HIGH' || value === 'MEDIUM' || value === 'LOW'
