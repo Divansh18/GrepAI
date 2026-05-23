@@ -9,23 +9,32 @@ import { AppModule } from './app.module';
 
 async function bootstrap() {
   const isProduction = process.env.NODE_ENV === 'production';
+
   const loggerLevels: LogLevel[] = isProduction
-    ? ['error', 'warn']
+    ? ['error', 'warn', 'log']
     : ['log', 'error', 'warn', 'debug', 'verbose'];
+
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     rawBody: true,
     logger: loggerLevels,
   });
 
   const configService = app.get(ConfigService);
-  const configuredFrontendUrl = configService.get<string>('FRONTEND_URL');
+
+  const configuredFrontendUrl =
+    configService.get<string>('FRONTEND_URL');
+
   if (isProduction && !configuredFrontendUrl) {
     throw new Error('FRONTEND_URL must be set in production.');
   }
-  const frontendUrl = configuredFrontendUrl ?? 'http://localhost:3000';
-  const port = configService.get<number>('PORT', 3001);
+
+  const frontendUrl =
+    configuredFrontendUrl ?? 'http://localhost:3000';
+
+  const port = Number(process.env.PORT) || 3001;
 
   app.use(helmet());
+
   app.useGlobalPipes(
     new ValidationPipe({
       whitelist: true,
@@ -36,6 +45,7 @@ async function bootstrap() {
       },
     }),
   );
+
   app.enableCors({
     origin: frontendUrl,
     credentials: true,
@@ -43,7 +53,12 @@ async function bootstrap() {
     allowedHeaders: ['Content-Type', 'Authorization'],
   });
 
-  await app.listen(port);
-  Logger.log(`Backend listening on port ${port}`, 'Bootstrap');
+  await app.listen(port, '0.0.0.0');
+
+  Logger.log(
+    `Backend listening on port ${port}`,
+    'Bootstrap',
+  );
 }
+
 void bootstrap();
