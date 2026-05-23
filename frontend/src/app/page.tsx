@@ -334,7 +334,7 @@ export default function HomePage() {
               <div className="flex flex-col gap-5 border-b border-white/10 px-6 py-5 sm:flex-row sm:items-center sm:justify-between lg:px-8">
                 <div>
                   <p className="text-[11px] font-medium uppercase tracking-[0.24em] text-white/46">
-                    Live PR intelligence artifact
+                    Review artifact
                   </p>
                   <div className="mt-4 flex flex-wrap items-center gap-4 font-[var(--font-ibm-plex-mono)] text-[16px] text-white">
                     <span>PR #42</span>
@@ -348,7 +348,7 @@ export default function HomePage() {
                 </div>
 
                 <div className="flex items-center gap-3 font-[var(--font-ibm-plex-mono)] text-[12px] uppercase tracking-[0.14em] text-white/48">
-                  <span>Analyzed 2m ago</span>
+                  <span>Representative GitHub review</span>
                   <span className="h-1.5 w-1.5 rounded-full bg-[#66D17A] animate-[statusPulse_2.8s_ease-in-out_infinite]" />
                 </div>
               </div>
@@ -496,7 +496,7 @@ export default function HomePage() {
 
                   <div className="mt-8 border-t border-white/10 pt-6">
                     <a
-                      href="https://github.com"
+                      href="https://github.com/Divansh18/GrepAI"
                       className="inline-flex items-center gap-3 text-[14px] text-white/84 transition-colors duration-200 hover:text-white"
                     >
                       <span className="font-[var(--font-ibm-plex-mono)]">

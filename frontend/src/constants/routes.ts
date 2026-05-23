@@ -5,7 +5,13 @@ export const APP_ROUTES = {
   authCallback: "/auth/callback",
 } as const;
 
-export const API_BASE_URL = "http://localhost:3001";
+function trimTrailingSlash(value: string): string {
+  return value.replace(/\/+$/, "");
+}
+
+export const API_BASE_URL = trimTrailingSlash(
+  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001",
+);
 
 export const API_ROUTES = {
   repos: `${API_BASE_URL}/repos`,
