@@ -5,6 +5,7 @@ import {
   IBM_Plex_Mono,
   Space_Grotesk,
 } from "next/font/google";
+import { Analytics } from "@vercel/analytics/react";
 
 import "./globals.css";
 
@@ -48,6 +49,7 @@ export default function RootLayout({
     >
       <body className="min-h-screen bg-[#050505] font-[var(--font-space-grotesk)] text-[#F5F5F2] antialiased">
         {children}
+        <Analytics />
       </body>
     </html>
   );
