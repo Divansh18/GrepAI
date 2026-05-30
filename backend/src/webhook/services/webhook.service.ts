@@ -640,7 +640,7 @@ export class WebhookService {
         riskLevel: this.toAnalysisRiskLevel(riskReport.riskLevel),
         confidence: riskReport.confidence,
         summary: riskReport.summary,
-        findings: comment,
+        reportMarkdown: comment,
         affectedFiles: JSON.stringify(affectedFiles),
         repo: { id: repo.id } as PrAnalysis['repo'],
       });

@@ -1,4 +1,6 @@
 export const TOKEN_STORAGE_KEY = "grepai_token";
+export const USER_NAME_STORAGE_KEY = "grepai_user_name";
+export const USER_EMAIL_STORAGE_KEY = "grepai_user_email";
 
 export function getStoredToken(): string | null {
   return window.localStorage.getItem(TOKEN_STORAGE_KEY);
@@ -9,7 +11,17 @@ export function storeToken(token: string): void {
 }
 
 export function clearStoredToken(): void {
+  clearAuthStorage();
+}
+
+export function clearAuthStorage(): void {
+  if (typeof window === "undefined") {
+    return;
+  }
+
   window.localStorage.removeItem(TOKEN_STORAGE_KEY);
+  window.localStorage.removeItem(USER_NAME_STORAGE_KEY);
+  window.localStorage.removeItem(USER_EMAIL_STORAGE_KEY);
 }
 
 export function decodeUsernameFromToken(token: string): string {

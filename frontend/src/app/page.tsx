@@ -1,14 +1,19 @@
-import Image from "next/image";
+"use client";
 
-import { EXTERNAL_ROUTES } from "../constants/routes";
+import Image from "next/image";
+import { useEffect, useState } from "react";
+
+import { CreateAccountModal } from "../components/home/CreateAccountModal";
+import { SignInModal } from "../components/home/SignInModal";
+import { APP_ROUTES, EXTERNAL_ROUTES } from "../constants/routes";
 import { AppNavbar } from "../components/layout/AppNavbar";
 import { GithubMark } from "../components/shared/GithubMark";
+import { decodeUsernameFromToken, getStoredToken, USER_NAME_STORAGE_KEY } from "../lib/auth";
 
 const navLinks = [
   { label: "How it works", href: "#how-it-works" },
   { label: "Review artifact", href: "#review-artifact" },
   { label: "Docs", href: "#footer" },
-  { label: "Pricing", href: "#footer" },
 ] as const;
 
 const stats = [
@@ -28,9 +33,9 @@ const stats = [
     detail: "Risk comments, context, and merge guidance stay in-thread",
   },
   {
-    value: "AI",
-    label: "Powered analysis",
-    detail: "Repository context graph built before judgment lands",
+    value: "Early",
+    label: "Access",
+    detail: "Accepting First 5 Engineering Teams",
   },
 ] as const;
 
@@ -194,15 +199,88 @@ function ArchitectureHeroBackground() {
 }
 
 export default function HomePage() {
+  const [hasSession, setHasSession] = useState(false);
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [isSignInModalOpen, setIsSignInModalOpen] = useState(false);
+  const [redirectAfterModal, setRedirectAfterModal] = useState(false);
+  const [userName, setUserName] = useState("");
+
+  useEffect(() => {
+    queueMicrotask(() => {
+      const token = getStoredToken();
+      const storedName = window.localStorage.getItem(USER_NAME_STORAGE_KEY);
+
+      if (token) {
+        setUserName(storedName?.trim() || decodeUsernameFromToken(token));
+        setHasSession(true);
+        return;
+      }
+
+      setUserName(storedName?.trim() || "");
+      setHasSession(false);
+    });
+  }, []);
+
+  const handleOpenCreateAccount = () => {
+    setIsSignInModalOpen(false);
+    setRedirectAfterModal(false);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenSignIn = () => {
+    setIsModalOpen(false);
+    setIsSignInModalOpen(true);
+  };
+
+  const handleHeroConnect = () => {
+    const token = getStoredToken();
+
+    if (token) {
+      window.location.href = APP_ROUTES.dashboard;
+      return;
+    }
+
+    const storedName = window.localStorage.getItem(USER_NAME_STORAGE_KEY);
+
+    if (storedName) {
+      window.location.href = EXTERNAL_ROUTES.githubAuth;
+      return;
+    }
+
+    setRedirectAfterModal(true);
+    setIsModalOpen(true);
+  };
+
+  const greetingName = userName.trim().split(/\s+/)[0];
+  const greetingInitial = greetingName.charAt(0).toUpperCase();
+
   return (
     <div className="min-h-screen bg-[#050505] text-[#F5F5F2]">
       <AppNavbar
         navLinks={[...navLinks]}
-        action={{
-          label: "Connect GitHub",
-          href: EXTERNAL_ROUTES.githubAuth,
-          icon: "github",
-        }}
+        action={
+          greetingName
+            ? {
+                label: `${greetingName} →`,
+                onClick: hasSession ? () => {
+                  window.location.href = APP_ROUTES.dashboard;
+                } : handleOpenSignIn,
+                subtle: true,
+                avatarLetter: greetingInitial,
+              }
+            : {
+                label: "Create Account",
+                onClick: handleOpenCreateAccount,
+              }
+        }
+        secondaryAction={
+          hasSession || greetingName
+            ? undefined
+            : {
+                label: "Sign In",
+                onClick: handleOpenSignIn,
+              }
+        }
       />
 
       <main>
@@ -246,14 +324,15 @@ export default function HomePage() {
                 </p>
 
                 <div className="mt-7 flex flex-col items-start gap-3 sm:flex-row sm:items-center">
-                  <a
-                    href={EXTERNAL_ROUTES.githubAuth}
-                    aria-label="Connect GitHub to GrepAI"
+                  <button
+                    type="button"
+                    onClick={handleHeroConnect}
+                    aria-label="Connect GitHub with GrepAI"
                     className="inline-flex h-12 items-center justify-center gap-3 border border-white/20 bg-white/5 px-5 text-[11px] font-bold uppercase tracking-[0.13em] text-white transition-colors duration-200 hover:border-white/42 hover:bg-white/[0.08]"
                   >
                     <GithubMark className="h-4 w-4 fill-current text-white" />
                     Connect GitHub
-                  </a>
+                  </button>
                   <a
                     href="#how-it-works"
                     aria-label="See how GrepAI works"
@@ -610,47 +689,41 @@ export default function HomePage() {
                 <ul className="mt-4 space-y-2">
                   <li>
                     <a href="#how-it-works" className="hover:text-white">
-                      How it works
+                      How It Works
                     </a>
                   </li>
                   <li>
                     <a href="#review-artifact" className="hover:text-white">
-                      Review artifact
+                      Review Artifact
                     </a>
                   </li>
-                  <li>
-                    <a href="#footer" className="hover:text-white">
-                      Pricing
-                    </a>
-                  </li>
-                </ul>
-              </div>
-
-              <div>
-                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/44">
-                  Resources
-                </p>
-                <ul className="mt-4 space-y-2">
-                  <li>Architecture</li>
-                  <li>Security</li>
-                  <li>API</li>
-                </ul>
-              </div>
-
-              <div>
-                <p className="text-[11px] font-medium uppercase tracking-[0.18em] text-white/44">
-                  Company
-                </p>
-                <ul className="mt-4 space-y-2">
-                  <li>About</li>
-                  <li>Careers</li>
-                  <li>Contact</li>
                 </ul>
               </div>
             </div>
           </div>
         </footer>
       </main>
+
+      <CreateAccountModal
+        isOpen={isModalOpen}
+        onClose={() => setIsModalOpen(false)}
+        redirectToGitHub={redirectAfterModal}
+        onSwitchToSignIn={handleOpenSignIn}
+        onSuccess={(name) => {
+          setUserName(name);
+          setIsModalOpen(false);
+        }}
+      />
+
+      <SignInModal
+        isOpen={isSignInModalOpen}
+        onClose={() => setIsSignInModalOpen(false)}
+        onSuccess={(name) => {
+          setUserName(name);
+          setIsSignInModalOpen(false);
+        }}
+        onSwitchToCreateAccount={handleOpenCreateAccount}
+      />
     </div>
   );
 }

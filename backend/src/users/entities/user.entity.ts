@@ -29,6 +29,12 @@ export class User {
   @Column({ type: 'text' })
   accessToken!: string;
 
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  fullName!: string | null;
+
+  @Column({ type: 'varchar', length: 255, nullable: true })
+  workEmail!: string | null;
+
   @OneToMany(() => Repo, (repo) => repo.user)
   repos!: Repo[];
 

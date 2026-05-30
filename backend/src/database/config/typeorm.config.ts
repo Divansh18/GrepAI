@@ -40,5 +40,10 @@ export function createTypeOrmConfig(
       configService.get<string>('TYPEORM_SYNCHRONIZE'),
       synchronizeDefault,
     ),
+    migrations: [__dirname + '/../../migrations/**/*{.ts,.js}'],
+    migrationsRun: parseBooleanConfig(
+      configService.get<string>('TYPEORM_MIGRATIONS_RUN'),
+      false,
+    ),
   };
 }

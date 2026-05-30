@@ -87,3 +87,40 @@ export async function connectRepository(
 
   return parseJsonResponse<ConnectResponse>(response);
 }
+
+export async function submitSignup(payload: {
+  name: string;
+  workEmail: string;
+  github?: string;
+}): Promise<{ success: true }> {
+  const response = await fetch(API_ROUTES.signup, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      ...payload,
+      github: payload.github ?? "pending",
+    }),
+  });
+
+  return parseJsonResponse<{ success: true }>(response);
+}
+
+export async function submitSignIn(payload: {
+  workEmail: string;
+}): Promise<{ exists: boolean; githubConnected?: boolean; name?: string }> {
+  const response = await fetch(API_ROUTES.signIn, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify(payload),
+  });
+
+  return parseJsonResponse<{
+    exists: boolean;
+    githubConnected?: boolean;
+    name?: string;
+  }>(response);
+}

@@ -14,8 +14,16 @@ type AppNavbarProps =
       navLinks: NavLink[];
       action: {
         label: string;
-        href: string;
+        href?: string;
+        onClick?: () => void;
         icon?: "github";
+        subtle?: boolean;
+        avatarLetter?: string;
+      };
+      secondaryAction?: {
+        label: string;
+        href?: string;
+        onClick?: () => void;
       };
       username?: never;
       onLogout?: never;
@@ -29,8 +37,27 @@ type AppNavbarProps =
     };
 
 export function AppNavbar(props: AppNavbarProps) {
-  const actionClassName =
-    "inline-flex h-12 items-center justify-center gap-3 border border-white/20 px-5 text-[11px] font-bold uppercase tracking-[0.13em] text-white transition-colors duration-200 hover:border-white/40 hover:bg-white/5";
+  const actionClassName = props.action?.subtle
+    ? "inline-flex h-12 items-center justify-center px-1 text-[12px] font-medium tracking-[0.02em] text-white/64 transition-colors duration-200 hover:text-white"
+    : "inline-flex h-12 items-center justify-center gap-3 border border-white/20 px-5 text-[11px] font-bold uppercase tracking-[0.13em] text-white transition-colors duration-200 hover:border-white/40 hover:bg-white/5";
+  const secondaryActionClassName =
+    "inline-flex h-12 items-center justify-center px-1 text-[11px] font-medium uppercase tracking-[0.13em] text-white/62 transition-colors duration-200 hover:text-white";
+
+  const actionContent = props.action ? (
+    props.action.subtle && props.action.avatarLetter ? (
+      <>
+        <span className="flex h-8 w-8 items-center justify-center rounded-full border border-white/14 bg-[#0B0B0B] font-[var(--font-ibm-plex-mono)] text-[12px] uppercase tracking-[0.08em] text-white">
+          {props.action.avatarLetter}
+        </span>
+        <span>{props.action.label}</span>
+      </>
+    ) : (
+      <>
+        {props.action.icon === "github" ? <GithubMark className="h-4 w-4 fill-current text-white" /> : null}
+        {props.action.label}
+      </>
+    )
+  ) : null;
 
   return (
     <header className="sticky top-0 z-30 border-b border-[#2A2A2A] bg-[#000000]">
@@ -95,22 +122,58 @@ export function AppNavbar(props: AppNavbarProps) {
               Logout
             </button>
           </div>
-        ) : props.action.href.startsWith("http") ? (
-          <a
-            href={props.action.href}
-            className={actionClassName}
-          >
-            {props.action.icon === "github" ? <GithubMark className="h-4 w-4 fill-current text-white" /> : null}
-            {props.action.label}
-          </a>
         ) : (
-          <Link
-            href={props.action.href}
-            className={actionClassName}
-          >
-            {props.action.icon === "github" ? <GithubMark className="h-4 w-4 fill-current text-white" /> : null}
-            {props.action.label}
-          </Link>
+          <div className="flex items-center gap-5">
+            {props.secondaryAction ? (
+              props.secondaryAction.onClick ? (
+                <button
+                  type="button"
+                  onClick={props.secondaryAction.onClick}
+                  className={secondaryActionClassName}
+                >
+                  {props.secondaryAction.label}
+                </button>
+              ) : props.secondaryAction.href?.startsWith("http") ? (
+                <a
+                  href={props.secondaryAction.href}
+                  className={secondaryActionClassName}
+                >
+                  {props.secondaryAction.label}
+                </a>
+              ) : (
+                <Link
+                  href={props.secondaryAction.href ?? "/"}
+                  className={secondaryActionClassName}
+                >
+                  {props.secondaryAction.label}
+                </Link>
+              )
+            ) : null}
+
+            {props.action.onClick ? (
+              <button
+                type="button"
+                onClick={props.action.onClick}
+                className={actionClassName}
+              >
+                {actionContent}
+              </button>
+            ) : props.action.href?.startsWith("http") ? (
+              <a
+                href={props.action.href}
+                className={actionClassName}
+              >
+                {actionContent}
+              </a>
+            ) : (
+              <Link
+                href={props.action.href ?? "/"}
+                className={actionClassName}
+              >
+                {actionContent}
+              </Link>
+            )}
+          </div>
         )}
       </div>
     </header>

@@ -4,6 +4,7 @@ import { JwtModule } from '@nestjs/jwt';
 import { PassportModule } from '@nestjs/passport';
 import { TypeOrmModule } from '@nestjs/typeorm';
 
+import { Signup } from '../entities/signup.entity';
 import { User } from '../../users/entities/user.entity';
 import { AuthController } from '../controllers/auth.controller';
 import { AuthService } from '../services/auth.service';
@@ -23,7 +24,7 @@ import { JwtStrategy } from '../strategies/jwt.strategy';
         },
       }),
     }),
-    TypeOrmModule.forFeature([User]),
+    TypeOrmModule.forFeature([User, Signup]),
   ],
   controllers: [AuthController],
   providers: [AuthService, GithubStrategy, JwtStrategy],

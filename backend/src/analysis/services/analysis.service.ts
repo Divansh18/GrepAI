@@ -90,7 +90,7 @@ export class AnalysisService {
           'analysis.riskLevel',
           'analysis.confidence',
           'analysis.summary',
-          'analysis.findings',
+          'analysis.reportMarkdown',
           'analysis.createdAt',
           'repo.id',
           'repo.fullName',
@@ -221,34 +221,35 @@ export class AnalysisService {
   }
 
   private sanitizeJsonResponse(rawResponseText: string): string {
-  const trimmed = rawResponseText.trim();
+    const trimmed = rawResponseText.trim();
 
-  const withoutCodeFence = trimmed
-    .replace(/^```json\s*/i, '')
-    .replace(/^```\s*/i, '')
-    .replace(/\s*```$/i, '');
+    const withoutCodeFence = trimmed
+      .replace(/^```json\s*/i, '')
+      .replace(/^```\s*/i, '')
+      .replace(/\s*```$/i, '');
 
-  const firstBraceIndex = withoutCodeFence.indexOf('{');
-  const lastBraceIndex = withoutCodeFence.lastIndexOf('}');
+    const firstBraceIndex = withoutCodeFence.indexOf('{');
+    const lastBraceIndex = withoutCodeFence.lastIndexOf('}');
 
-  if (firstBraceIndex === -1 || lastBraceIndex === -1) {
-    throw new Error('No valid JSON object found in Claude response');
+    if (firstBraceIndex === -1 || lastBraceIndex === -1) {
+      throw new Error('No valid JSON object found in Claude response');
+    }
+
+    let jsonCandidate = withoutCodeFence.slice(
+      firstBraceIndex,
+      lastBraceIndex + 1,
+    );
+
+    jsonCandidate = Array.from(jsonCandidate, (character) => {
+      const code = character.charCodeAt(0);
+
+      return code < 32 ? ' ' : character;
+    }).join('');
+
+    jsonCandidate = jsonCandidate.trim();
+
+    return jsonCandidate;
   }
-
-  let jsonCandidate = withoutCodeFence.slice(
-    firstBraceIndex,
-    lastBraceIndex + 1,
-  );
-
-  jsonCandidate = jsonCandidate
-    .replace(/[\u0000-\u001F]+/g, ' ')
-    .replace(/\n/g, ' ')
-    .replace(/\r/g, ' ')
-    .replace(/\t/g, ' ')
-    .trim();
-
-  return jsonCandidate;
-}
 
   private normalizeRiskLevel(value: unknown): RiskLevel {
     return value === 'HIGH' || value === 'MEDIUM' || value === 'LOW'
@@ -343,8 +344,8 @@ export class AnalysisService {
       return analysis.summary.trim();
     }
 
-    const parsedFindingSummary = this.extractSummaryFromFindings(
-      analysis.findings,
+    const parsedFindingSummary = this.extractSummaryFromReportMarkdown(
+      analysis.reportMarkdown,
     );
 
     if (parsedFindingSummary) {
@@ -354,16 +355,20 @@ export class AnalysisService {
     return 'Automated analysis completed without a stored summary.';
   }
 
-  private extractSummaryFromFindings(findings: string): string | null {
-    if (!findings.trim()) {
+  private extractSummaryFromReportMarkdown(
+    reportMarkdown: string,
+  ): string | null {
+    if (!reportMarkdown.trim()) {
       return null;
     }
 
     try {
-      const parsed = JSON.parse(findings) as Array<{ description?: unknown }>;
+      const parsed = JSON.parse(reportMarkdown) as Array<{
+        description?: unknown;
+      }>;
 
       if (!Array.isArray(parsed) || parsed.length === 0) {
-        return findings.trim().slice(0, 180);
+        return reportMarkdown.trim().slice(0, 180);
       }
 
       const firstDescription = parsed.find(
@@ -376,9 +381,9 @@ export class AnalysisService {
 
       return typeof firstDescription === 'string'
         ? firstDescription.trim()
-        : findings.trim().slice(0, 180);
+        : reportMarkdown.trim().slice(0, 180);
     } catch {
-      return findings.trim().slice(0, 180);
+      return reportMarkdown.trim().slice(0, 180);
     }
   }
 }

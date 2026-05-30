@@ -5,7 +5,7 @@ export type Repo = {
   owner: string;
   name: string;
   fullName: string;
-  webhookId: string | null;
+  githubWebhookId: string | null;
   isActive: boolean;
   createdAt: string;
   updatedAt: string;
@@ -25,7 +25,7 @@ export type ConnectResponse = {
   name: string;
   fullName: string;
   isActive: boolean;
-  webhookId: string | null;
+  githubWebhookId: string | null;
   createdAt: string;
   updatedAt: string;
 };

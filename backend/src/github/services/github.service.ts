@@ -363,15 +363,15 @@ export class GithubService {
     octokit: Octokit,
     owner: string,
     repo: string,
-    webhookId: string,
+    githubWebhookId: string,
     webhookUrl: string,
     webhookSecret: string,
   ): Promise<string | null> {
-    const parsedWebhookId = Number.parseInt(webhookId, 10);
+    const parsedWebhookId = Number.parseInt(githubWebhookId, 10);
 
     if (!Number.isFinite(parsedWebhookId)) {
       this.logger.warn(
-        `Stored webhook id "${webhookId}" for ${owner}/${repo} is invalid; creating a new webhook instead.`,
+        `Stored GitHub webhook id "${githubWebhookId}" for ${owner}/${repo} is invalid; creating a new webhook instead.`,
       );
       return null;
     }
@@ -395,7 +395,7 @@ export class GithubService {
       const { status, message } = this.extractGithubErrorDetails(error);
 
       this.logger.warn(
-        `Failed to update existing webhook ${webhookId} for ${owner}/${repo}: ${message} (${status})`,
+        `Failed to update existing webhook ${githubWebhookId} for ${owner}/${repo}: ${message} (${status})`,
       );
       return null;
     }

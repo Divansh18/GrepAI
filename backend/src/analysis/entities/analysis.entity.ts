@@ -15,7 +15,7 @@ export enum RiskLevel {
   HIGH = 'HIGH',
 }
 
-@Entity({ name: 'pr_analyses' })
+@Entity({ name: 'pull_request_analyses' })
 export class PrAnalysis {
   @PrimaryGeneratedColumn()
   id!: number;
@@ -38,8 +38,8 @@ export class PrAnalysis {
   @Column({ type: 'text', nullable: true })
   summary!: string | null;
 
-  @Column({ type: 'text' })
-  findings!: string;
+  @Column({ type: 'text', name: 'reportMarkdown' })
+  reportMarkdown!: string;
 
   @Column({ type: 'text', nullable: true })
   affectedFiles!: string | null;
