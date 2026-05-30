@@ -5,7 +5,7 @@ export class AuthUserDto {
   avatarUrl!: string | null;
 }
 
-export class AuthResponseDto {
+export class AuthSessionDto {
   accessToken!: string;
   user!: AuthUserDto;
 }

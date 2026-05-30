@@ -361,8 +361,8 @@ export default function DashboardPage() {
           ...reportsByTime.slice(0, 4).map((report) => buildActivityItem(report)),
           ...repos.slice(0, 2).map((repo) => ({
             time: formatActivityTime(repo.createdAt),
-            label: repo.webhookId ? "WEBHOOK ACTIVE" : "REPOSITORY CONNECTED",
-            detail: repo.webhookId
+            label: repo.githubWebhookId ? "WEBHOOK ACTIVE" : "REPOSITORY CONNECTED",
+            detail: repo.githubWebhookId
               ? `${repo.fullName} monitoring active`
               : `${repo.fullName} awaiting webhook confirmation`,
           })),
@@ -424,7 +424,7 @@ export default function DashboardPage() {
                 <div className="flex items-center justify-between border-b border-[#2A2A2A] pb-3">
                   <span>Webhook state</span>
                   <span className="text-white/78">
-                    {repos.some((repo) => repo.webhookId) ? "Active" : "Idle"}
+                    {repos.some((repo) => repo.githubWebhookId) ? "Active" : "Idle"}
                   </span>
                 </div>
                 <div className="flex items-center justify-between">
@@ -639,7 +639,7 @@ export default function DashboardPage() {
                     </span>
                   </div>
                   <p className="mt-3 text-[13px] leading-6 text-white/58">
-                    {repo.webhookId
+                    {repo.githubWebhookId
                       ? `Webhook active • last analysis ${
                           repo.latestAnalysis
                             ? formatRelativeTime(repo.latestAnalysis.createdAt)

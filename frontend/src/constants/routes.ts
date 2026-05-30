@@ -10,7 +10,9 @@ function trimTrailingSlash(value: string): string {
 }
 
 export const API_BASE_URL = trimTrailingSlash(
-  process.env.NEXT_PUBLIC_API_BASE_URL || "http://localhost:3001",
+  process.env.NEXT_PUBLIC_API_URL ||
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    "http://localhost:3001",
 );
 
 export const API_ROUTES = {
@@ -18,6 +20,8 @@ export const API_ROUTES = {
   recentAnalyses: `${API_BASE_URL}/analysis/recent`,
   githubRepos: `${API_BASE_URL}/repos/github-repos`,
   connectRepo: `${API_BASE_URL}/repos/connect`,
+  signup: `${API_BASE_URL}/auth/signup`,
+  signIn: `${API_BASE_URL}/auth/sign-in`,
 } as const;
 
 export const EXTERNAL_ROUTES = {

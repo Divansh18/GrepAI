@@ -71,6 +71,22 @@ export class ReposService {
         });
       }
 
+      const globallyConnectedRepo = await this.repoRepository.findOne({
+        where: {
+          fullName,
+          isActive: true,
+        },
+      });
+
+      if (globallyConnectedRepo) {
+        this.logger.warn(
+          `Repository ${fullName} is already connected globally in GrepAI.`,
+        );
+        throw new BadRequestException(
+          'This repository is already connected to GrepAI.',
+        );
+      }
+
       const user = await this.userRepository.findOne({
         where: { id: userId },
       });
@@ -99,7 +115,7 @@ export class ReposService {
         name: normalizedName,
         fullName,
         isActive: true,
-        webhookId: null,
+        githubWebhookId: null,
         user,
       });
 
@@ -212,23 +228,23 @@ export class ReposService {
   ): Promise<void> {
     this.logger.log(`Creating webhook for ${repo.fullName}`);
 
-    const webhookId = await this.githubService.createRepositoryWebhook(
+    const githubWebhookId = await this.githubService.createRepositoryWebhook(
       accessToken,
       repo.owner,
       repo.name,
-      repo.webhookId,
+      repo.githubWebhookId,
     );
 
-    if (!webhookId) {
+    if (!githubWebhookId) {
       this.logger.error(`Failed to activate webhook for ${repo.fullName}`);
       throw new BadRequestException(
         'GitHub webhook activation failed. Reconnect GitHub and verify repository webhook permissions.',
       );
     }
 
-    repo.webhookId = webhookId;
+    repo.githubWebhookId = githubWebhookId;
     await this.repoRepository.save(repo);
 
-    this.logger.log(`Webhook created successfully: ${webhookId}`);
+    this.logger.log(`Webhook created successfully: ${githubWebhookId}`);
   }
 }

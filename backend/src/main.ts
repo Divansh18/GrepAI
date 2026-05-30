@@ -21,15 +21,13 @@ async function bootstrap() {
 
   const configService = app.get(ConfigService);
 
-  const configuredFrontendUrl =
-    configService.get<string>('FRONTEND_URL');
+  const configuredFrontendUrl = configService.get<string>('FRONTEND_URL');
 
   if (isProduction && !configuredFrontendUrl) {
     throw new Error('FRONTEND_URL must be set in production.');
   }
 
-  const frontendUrl =
-    configuredFrontendUrl ?? 'http://localhost:3000';
+  const frontendUrl = configuredFrontendUrl ?? 'http://localhost:3000';
 
   const port = Number(process.env.PORT) || 3001;
 
@@ -55,10 +53,7 @@ async function bootstrap() {
 
   await app.listen(port, '0.0.0.0');
 
-  Logger.log(
-    `Backend listening on port ${port}`,
-    'Bootstrap',
-  );
+  Logger.log(`Backend listening on port ${port}`, 'Bootstrap');
 }
 
 void bootstrap();

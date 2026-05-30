@@ -12,7 +12,7 @@ import {
 import { PrAnalysis } from '../../analysis/entities/analysis.entity';
 import { User } from '../../users/entities/user.entity';
 
-@Entity({ name: 'repos' })
+@Entity({ name: 'repositories' })
 export class Repo {
   @PrimaryGeneratedColumn()
   id!: number;
@@ -26,8 +26,8 @@ export class Repo {
   @Column({ length: 255 })
   fullName!: string;
 
-  @Column({ type: 'varchar', nullable: true })
-  webhookId!: string | null;
+  @Column({ type: 'varchar', nullable: true, name: 'githubWebhookId' })
+  githubWebhookId!: string | null;
 
   @Column({ default: true })
   isActive!: boolean;
