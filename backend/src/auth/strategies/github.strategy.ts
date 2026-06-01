@@ -42,4 +42,10 @@ export class GithubStrategy extends PassportStrategy(Strategy, 'github') {
       accessToken,
     };
   }
+
+  authorizationParams(): { prompt: string } {
+    return {
+      prompt: 'select_account',
+    };
+  }
 }

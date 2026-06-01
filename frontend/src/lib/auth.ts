@@ -2,6 +2,13 @@ export const TOKEN_STORAGE_KEY = "grepai_token";
 export const USER_NAME_STORAGE_KEY = "grepai_user_name";
 export const USER_EMAIL_STORAGE_KEY = "grepai_user_email";
 
+type SessionUserPayload = {
+  username?: unknown;
+  name?: unknown;
+  email?: unknown;
+  sub?: unknown;
+};
+
 export function getStoredToken(): string | null {
   return window.localStorage.getItem(TOKEN_STORAGE_KEY);
 }
@@ -24,12 +31,12 @@ export function clearAuthStorage(): void {
   window.localStorage.removeItem(USER_EMAIL_STORAGE_KEY);
 }
 
-export function decodeUsernameFromToken(token: string): string {
+function decodeTokenPayload(token: string): SessionUserPayload | null {
   try {
     const payload = token.split(".")[1];
 
     if (!payload) {
-      return "Engineer";
+      return null;
     }
 
     const normalizedPayload = payload.replace(/-/g, "+").replace(/_/g, "/");
@@ -37,12 +44,44 @@ export function decodeUsernameFromToken(token: string): string {
       normalizedPayload.length + ((4 - (normalizedPayload.length % 4)) % 4),
       "=",
     );
-    const parsed = JSON.parse(atob(paddedPayload)) as { username?: unknown };
-
-    return typeof parsed.username === "string" && parsed.username.trim().length > 0
-      ? parsed.username
-      : "Engineer";
+    return JSON.parse(atob(paddedPayload)) as SessionUserPayload;
   } catch {
-    return "Engineer";
+    return null;
   }
+}
+
+export function getSessionUserFromToken(token: string): {
+  username: string;
+  email: string;
+  displayName: string;
+} {
+  const parsed = decodeTokenPayload(token);
+  const username =
+    typeof parsed?.username === "string" && parsed.username.trim().length > 0
+      ? parsed.username.trim()
+      : "";
+  const name =
+    typeof parsed?.name === "string" && parsed.name.trim().length > 0
+      ? parsed.name.trim()
+      : "";
+  const email =
+    typeof parsed?.email === "string" && parsed.email.trim().length > 0
+      ? parsed.email.trim()
+      : "";
+  const subject =
+    typeof parsed?.sub === "string" && parsed.sub.trim().length > 0
+      ? parsed.sub.trim()
+      : "";
+  const emailPrefix = email.includes("@") ? email.split("@")[0] ?? "" : "";
+  const displayName = username || name || emailPrefix || subject || "";
+
+  return {
+    username,
+    email,
+    displayName,
+  };
+}
+
+export function decodeUsernameFromToken(token: string): string {
+  return getSessionUserFromToken(token).displayName || "Engineer";
 }
