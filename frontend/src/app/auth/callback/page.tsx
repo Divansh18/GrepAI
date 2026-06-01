@@ -4,7 +4,13 @@ import { Suspense, useEffect } from "react";
 import { useRouter, useSearchParams } from "next/navigation";
 
 import { APP_ROUTES } from "../../../constants/routes";
-import { storeToken } from "../../../lib/auth";
+import {
+  clearAuthStorage,
+  getSessionUserFromToken,
+  storeToken,
+  USER_EMAIL_STORAGE_KEY,
+  USER_NAME_STORAGE_KEY,
+} from "../../../lib/auth";
 import { ConsoleLoadingState } from "../../../components/shared/ConsoleLoadingState";
 
 function AuthCallbackContent() {
@@ -20,7 +26,19 @@ function AuthCallbackContent() {
     }
 
     try {
+      clearAuthStorage();
       storeToken(token);
+
+      const sessionUser = getSessionUserFromToken(token);
+
+      if (sessionUser.displayName) {
+        window.localStorage.setItem(USER_NAME_STORAGE_KEY, sessionUser.displayName);
+      }
+
+      if (sessionUser.email) {
+        window.localStorage.setItem(USER_EMAIL_STORAGE_KEY, sessionUser.email);
+      }
+
       router.replace(APP_ROUTES.dashboard);
     } catch {
       router.replace(APP_ROUTES.home);

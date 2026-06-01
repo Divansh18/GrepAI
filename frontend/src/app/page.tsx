@@ -8,7 +8,14 @@ import { SignInModal } from "../components/home/SignInModal";
 import { APP_ROUTES, EXTERNAL_ROUTES } from "../constants/routes";
 import { AppNavbar } from "../components/layout/AppNavbar";
 import { GithubMark } from "../components/shared/GithubMark";
-import { decodeUsernameFromToken, getStoredToken, USER_NAME_STORAGE_KEY } from "../lib/auth";
+import {
+  clearAuthStorage,
+  clearStoredToken,
+  getSessionUserFromToken,
+  getStoredToken,
+  USER_EMAIL_STORAGE_KEY,
+  USER_NAME_STORAGE_KEY,
+} from "../lib/auth";
 
 const navLinks = [
   { label: "How it works", href: "#how-it-works" },
@@ -199,7 +206,6 @@ function ArchitectureHeroBackground() {
 }
 
 export default function HomePage() {
-  const [hasSession, setHasSession] = useState(false);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [isSignInModalOpen, setIsSignInModalOpen] = useState(false);
   const [redirectAfterModal, setRedirectAfterModal] = useState(false);
@@ -209,38 +215,102 @@ export default function HomePage() {
     queueMicrotask(() => {
       const token = getStoredToken();
       const storedName = window.localStorage.getItem(USER_NAME_STORAGE_KEY);
+      const storedEmail = window.localStorage.getItem(USER_EMAIL_STORAGE_KEY);
 
-      if (token) {
-        setUserName(storedName?.trim() || decodeUsernameFromToken(token));
-        setHasSession(true);
+      if (!token) {
+        clearAuthStorage();
+        setUserName("");
         return;
       }
 
-      setUserName(storedName?.trim() || "");
-      setHasSession(false);
+      const sessionUser = getSessionUserFromToken(token);
+      const tokenDisplayName = sessionUser.displayName.trim();
+      const tokenEmail = sessionUser.email.trim().toLowerCase();
+      const normalizedStoredName = storedName?.trim().toLowerCase() ?? "";
+      const normalizedStoredEmail = storedEmail?.trim().toLowerCase() ?? "";
+      const normalizedTokenName = tokenDisplayName.toLowerCase();
+      const hasNameConflict =
+        normalizedStoredName.length > 0 &&
+        normalizedTokenName.length > 0 &&
+        normalizedStoredName !== normalizedTokenName;
+      const hasEmailConflict =
+        normalizedStoredEmail.length > 0 &&
+        tokenEmail.length > 0 &&
+        normalizedStoredEmail !== tokenEmail;
+
+      if (hasNameConflict || hasEmailConflict || !tokenDisplayName) {
+        clearAuthStorage();
+        setUserName("");
+        return;
+      }
+
+      if (!normalizedStoredName) {
+        window.localStorage.setItem(USER_NAME_STORAGE_KEY, tokenDisplayName);
+      }
+
+      if (!normalizedStoredEmail && tokenEmail) {
+        window.localStorage.setItem(USER_EMAIL_STORAGE_KEY, sessionUser.email);
+      }
+
+      if (tokenDisplayName) {
+        setUserName(tokenDisplayName);
+        return;
+      }
     });
   }, []);
 
   const handleOpenCreateAccount = () => {
+    clearAuthStorage();
+    setUserName("");
     setIsSignInModalOpen(false);
     setRedirectAfterModal(false);
     setIsModalOpen(true);
   };
 
   const handleOpenSignIn = () => {
+    clearAuthStorage();
+    setUserName("");
     setIsModalOpen(false);
     setIsSignInModalOpen(true);
   };
 
+  const handleLogout = () => {
+    clearStoredToken();
+    setUserName("");
+    setIsModalOpen(false);
+    setIsSignInModalOpen(false);
+    setRedirectAfterModal(false);
+  };
+
   const handleHeroConnect = () => {
     const token = getStoredToken();
+    const storedName = window.localStorage.getItem(USER_NAME_STORAGE_KEY);
+    const storedEmail = window.localStorage.getItem(USER_EMAIL_STORAGE_KEY);
 
     if (token) {
+      const sessionUser = getSessionUserFromToken(token);
+      const tokenDisplayName = sessionUser.displayName.trim().toLowerCase();
+      const tokenEmail = sessionUser.email.trim().toLowerCase();
+      const hasNameConflict =
+        !!storedName?.trim() &&
+        !!tokenDisplayName &&
+        storedName.trim().toLowerCase() !== tokenDisplayName;
+      const hasEmailConflict =
+        !!storedEmail?.trim() &&
+        !!tokenEmail &&
+        storedEmail.trim().toLowerCase() !== tokenEmail;
+
+      if (!tokenDisplayName || hasNameConflict || hasEmailConflict) {
+        clearAuthStorage();
+        setUserName("");
+        setRedirectAfterModal(true);
+        setIsModalOpen(true);
+        return;
+      }
+
       window.location.href = APP_ROUTES.dashboard;
       return;
     }
-
-    const storedName = window.localStorage.getItem(USER_NAME_STORAGE_KEY);
 
     if (storedName) {
       window.location.href = EXTERNAL_ROUTES.githubAuth;
@@ -252,7 +322,6 @@ export default function HomePage() {
   };
 
   const greetingName = userName.trim().split(/\s+/)[0];
-  const greetingInitial = greetingName.charAt(0).toUpperCase();
 
   return (
     <div className="min-h-screen bg-[#050505] text-[#F5F5F2]">
@@ -261,21 +330,20 @@ export default function HomePage() {
         action={
           greetingName
             ? {
-                label: `${greetingName} →`,
-                onClick: hasSession ? () => {
-                  window.location.href = APP_ROUTES.dashboard;
-                } : handleOpenSignIn,
+                label: `Hey, ${greetingName}`,
                 subtle: true,
-                avatarLetter: greetingInitial,
               }
             : {
-                label: "Create Account",
+                label: "GET STARTED",
                 onClick: handleOpenCreateAccount,
               }
         }
         secondaryAction={
-          hasSession || greetingName
-            ? undefined
+          greetingName
+            ? {
+                label: "LOGOUT",
+                onClick: handleLogout,
+              }
             : {
                 label: "Sign In",
                 onClick: handleOpenSignIn,

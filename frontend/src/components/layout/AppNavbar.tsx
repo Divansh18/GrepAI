@@ -37,11 +37,16 @@ type AppNavbarProps =
     };
 
 export function AppNavbar(props: AppNavbarProps) {
+  const reverseActionRow =
+    !!props.action?.subtle &&
+    !props.action.onClick &&
+    !props.action.href &&
+    props.secondaryAction?.label === "LOGOUT";
   const actionClassName = props.action?.subtle
-    ? "inline-flex h-12 items-center justify-center px-1 text-[12px] font-medium tracking-[0.02em] text-white/64 transition-colors duration-200 hover:text-white"
+    ? "inline-flex h-12 items-center justify-center px-1 text-[12px] font-bold tracking-[0.02em] text-white/78 transition-colors duration-200 hover:text-white"
     : "inline-flex h-12 items-center justify-center gap-3 border border-white/20 px-5 text-[11px] font-bold uppercase tracking-[0.13em] text-white transition-colors duration-200 hover:border-white/40 hover:bg-white/5";
   const secondaryActionClassName =
-    "inline-flex h-12 items-center justify-center px-1 text-[11px] font-medium uppercase tracking-[0.13em] text-white/62 transition-colors duration-200 hover:text-white";
+    "inline-flex h-12 items-center justify-center px-1 text-[11px] font-bold uppercase tracking-[0.13em] text-white/78 transition-colors duration-200 hover:text-white";
 
   const actionContent = props.action ? (
     props.action.subtle && props.action.avatarLetter ? (
@@ -124,6 +129,40 @@ export function AppNavbar(props: AppNavbarProps) {
           </div>
         ) : (
           <div className="flex items-center gap-5">
+            {props.action.onClick ? (
+              <button
+                type="button"
+                onClick={props.action.onClick}
+                className={actionClassName}
+              >
+                {actionContent}
+              </button>
+            ) : props.action.href?.startsWith("http") ? (
+              <a
+                href={props.action.href}
+                className={actionClassName}
+              >
+                {actionContent}
+              </a>
+            ) : props.action.href ? (
+              <Link
+                href={props.action.href}
+                className={actionClassName}
+              >
+                {actionContent}
+              </Link>
+            ) : (
+              <span className={actionClassName}>
+                {actionContent}
+              </span>
+            )}
+
+            {reverseActionRow && props.secondaryAction ? (
+              <span className="text-[11px] font-bold uppercase tracking-[0.13em] text-white/42">
+                |
+              </span>
+            ) : null}
+
             {props.secondaryAction ? (
               props.secondaryAction.onClick ? (
                 <button
@@ -149,30 +188,6 @@ export function AppNavbar(props: AppNavbarProps) {
                 </Link>
               )
             ) : null}
-
-            {props.action.onClick ? (
-              <button
-                type="button"
-                onClick={props.action.onClick}
-                className={actionClassName}
-              >
-                {actionContent}
-              </button>
-            ) : props.action.href?.startsWith("http") ? (
-              <a
-                href={props.action.href}
-                className={actionClassName}
-              >
-                {actionContent}
-              </a>
-            ) : (
-              <Link
-                href={props.action.href ?? "/"}
-                className={actionClassName}
-              >
-                {actionContent}
-              </Link>
-            )}
           </div>
         )}
       </div>
