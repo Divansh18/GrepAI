@@ -1,4 +1,4 @@
-import type { RecentAnalysis } from "./analysis";
+import type { RecentAnalysis } from "@/types/analysis";
 
 export type Repo = {
   id: number;
@@ -32,6 +32,4 @@ export type ConnectResponse = {
 
 export type RepoInsight = Repo & {
   latestAnalysis?: RecentAnalysis;
-  analysisCount: number;
-  affectedModules: string[];
 };

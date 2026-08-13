@@ -1,6 +1,6 @@
 # GrepAI Frontend
 
-The GrepAI frontend is a Next.js application that presents the product as a dark, architecture-aware engineering tool rather than a generic SaaS dashboard. It covers four core surfaces:
+The GrepAI frontend is a Next.js application that presents the product as a minimal developer tool rather than a generic SaaS dashboard. It covers four core surfaces:
 
 - landing page
 - GitHub OAuth callback
@@ -9,18 +9,15 @@ The GrepAI frontend is a Next.js application that presents the product as a dark
 
 ## Frontend Philosophy
 
-The UI is intentionally opinionated:
+The UI is intentionally restrained:
 
-- black minimal interface
-- off-white primary typography
-- muted gray system metadata
-- sharp borders
-- restrained amber accents for proof and technical emphasis
-- no gradients
-- no glow
-- no rounded SaaS widgets
-
-The result should feel closer to an internal developer platform or observability tool than a consumer onboarding experience.
+- dark, atmospheric landing page
+- minimal light workspace surfaces for authenticated flows
+- muted system metadata
+- thin borders
+- semantic color only for state and risk
+- subtle motion
+- no decorative dashboard clutter
 
 ## Stack
 
@@ -35,10 +32,10 @@ The result should feel closer to an internal developer platform or observability
 
 Product landing page with:
 
-- architecture-aware positioning
+- minimal GrepAI positioning
 - GitHub-native CTA
 - real PR output proof artifact
-- live system-style product framing
+- restrained developer-tool presentation
 
 ### `/auth/callback`
 
@@ -46,20 +43,20 @@ Receives the JWT token from the backend OAuth callback, stores it in local stora
 
 ### `/connect`
 
-Repository onboarding flow with:
+Repository connection flow with:
 
-- GitHub-native repository picker
-- webhook activation flow
-- command-palette style selection UX
+- GitHub-backed repository loading
+- real connected-state handling
+- clean row-based connection UI
 
 ### `/dashboard`
 
-Operational intelligence console showing:
+Operational workspace showing:
 
-- live merge intelligence state
-- compact risk stream
 - connected repositories
-- system activity feed
+- recent risk state
+- contextual PR analysis previews
+- detailed risk analysis view
 
 ## Folder Structure
 
@@ -73,17 +70,18 @@ frontend/
 │   ├── layout.tsx
 │   └── page.tsx
 ├── components/
-│   ├── layout/
-│   │   └── AppNavbar.tsx
 │   └── shared/
-│       ├── ArchitectureBackdrop.tsx
 │       ├── ConsoleLoadingState.tsx
 │       └── GithubMark.tsx
+│   └── workspace/
+│       ├── WorkspaceHeader.tsx
+│       └── WorkspaceLoadingState.tsx
 ├── constants/
 │   └── routes.ts
 ├── lib/
 │   ├── api.ts
-│   └── auth.ts
+│   ├── auth.ts
+│   └── date.ts
 ├── public/
 └── types/
     ├── analysis.ts
@@ -95,13 +93,14 @@ frontend/
 ### Layout
 
 - App Router pages own only page-level state and composition
-- shared navbar and visual primitives live in `components/`
-- background atmosphere is centralized through `ArchitectureBackdrop`
+- shared UI primitives live in `components/`
+- workspace-specific shells live in `components/workspace/`
 
 ### State & Data
 
 - API helpers live in `lib/api.ts`
 - JWT token helpers live in `lib/auth.ts`
+- shared date formatting lives in `lib/date.ts`
 - shared route constants live in `constants/routes.ts`
 - domain typing lives in `types/`
 
@@ -175,8 +174,6 @@ Before deployment, review hardcoded local backend URLs in:
 
 Recommended future production hardening:
 
-- move API origin to `NEXT_PUBLIC_API_BASE_URL`
-- add environment-aware route helpers
 - configure CSP and image domains if external assets are introduced
 
 ## Screens & Assets

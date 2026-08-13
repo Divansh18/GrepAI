@@ -20,8 +20,6 @@ export const API_ROUTES = {
   recentAnalyses: `${API_BASE_URL}/analysis/recent`,
   githubRepos: `${API_BASE_URL}/repos/github-repos`,
   connectRepo: `${API_BASE_URL}/repos/connect`,
-  signup: `${API_BASE_URL}/auth/signup`,
-  signIn: `${API_BASE_URL}/auth/sign-in`,
 } as const;
 
 export const EXTERNAL_ROUTES = {
