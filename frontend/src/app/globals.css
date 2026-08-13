@@ -2,10 +2,16 @@
 
 :root {
   color-scheme: dark;
+  --font-space-grotesk: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-dm-serif-display: Georgia, "Times New Roman", serif;
+  --font-ibm-plex-mono: "SFMono-Regular", Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+  --font-landing-geist: "Helvetica Neue", Helvetica, Arial, sans-serif;
+  --font-landing-inter: "Helvetica Neue", Helvetica, Arial, sans-serif;
 }
 
 html {
   background: #050505;
+  scroll-behavior: smooth;
 }
 
 body {
@@ -74,5 +80,11 @@ a {
   100% {
     opacity: 1;
     transform: translateY(0);
+  }
+}
+
+@keyframes landingContentFadeIn {
+  to {
+    opacity: 1;
   }
 }

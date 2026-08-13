@@ -22,6 +22,25 @@ function parseBooleanConfig(
   return fallback;
 }
 
+function parseNumberConfig(
+  value: number | string | undefined,
+  fallback: number,
+): number {
+  if (typeof value === 'number' && Number.isFinite(value)) {
+    return value;
+  }
+
+  if (typeof value === 'string') {
+    const parsedValue = Number.parseInt(value, 10);
+
+    if (Number.isFinite(parsedValue)) {
+      return parsedValue;
+    }
+  }
+
+  return fallback;
+}
+
 export function createTypeOrmConfig(
   configService: ConfigService,
 ): TypeOrmModuleOptions {
@@ -31,7 +50,10 @@ export function createTypeOrmConfig(
   return {
     type: 'mysql',
     host: configService.get<string>('DATABASE_HOST'),
-    port: configService.get<number>('DATABASE_PORT', 3306),
+    port: parseNumberConfig(
+      configService.get<number | string>('DATABASE_PORT'),
+      3306,
+    ),
     username: configService.get<string>('DATABASE_USER'),
     password: configService.get<string>('DATABASE_PASS'),
     database: configService.get<string>('DATABASE_NAME'),
