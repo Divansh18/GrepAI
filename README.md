@@ -32,22 +32,13 @@ GrepAI treats a pull request as a system event, not a diff blob. It reconstructs
 - posts a compact GrepAI comment back to the PR
 - stores analysis history for dashboard visibility and future repository intelligence
 
-## Product Screens
+## See It in Action
 
-> Replace these placeholders with final screenshots or demo GIFs as the product evolves.
+A real GrepAI review posted on a pull request:
 
-| Surface | Preview | Suggested Asset Path |
-| --- | --- | --- |
-| Landing page | Product positioning + proof artifact | `docs/images/landing-page.png` |
-| Dashboard | Live merge intelligence console | `docs/images/dashboard.png` |
-| Connect repository | GitHub-native onboarding flow | `docs/images/connect-page.png` |
-| PR comment | GrepAI review posted in GitHub | `docs/images/github-pr-comment.png` |
+![GrepAI risk analysis comment on a GitHub pull request](./frontend/public/github-pr-proof.png)
 
-### Current in-repo visual assets
-
-- Logo: [`frontend/public/grepai-logo.png`](./frontend/public/grepai-logo.png)
-- Landing proof image: [`frontend/public/github-pr-proof.png`](./frontend/public/github-pr-proof.png)
-- Architecture background: [`frontend/public/architecture-bg.png`](./frontend/public/architecture-bg.png)
+Try it live at [grepai.dev](https://www.grepai.dev/).
 
 ## Architecture Overview
 
@@ -256,4 +247,4 @@ Then:
 
 ## License
 
-This repository is currently private and marked `UNLICENSED`.
+The source is public for viewing and is marked `UNLICENSED` (all rights reserved).
